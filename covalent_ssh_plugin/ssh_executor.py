@@ -26,7 +26,7 @@ Executor plugin for executing the function on a remote machine through ssh.
 import io
 import os
 from contextlib import redirect_stderr, redirect_stdout
-from typing import Any
+from typing import Any, Callable, Tuple, Union
 
 # Executor-specific imports:
 import cloudpickle as pickle
@@ -227,6 +227,7 @@ class SSHExecutor(BaseExecutor):
         Returns:
             None
         """
+
         params = {"executors": {"ssh_executor": {}}}
         try:
             get_config("executors.ssh_executor.username")
@@ -265,10 +266,29 @@ class SSHExecutor(BaseExecutor):
         if params != {"executors": {"ssh_executor": {}}}:
             update_config(params)
 
-    def _on_ssh_fail(self, fn, kwargs, stdout, stderr, message):
+    def _on_ssh_fail(
+        self,
+        fn: Callable,
+        kwargs: dict,
+        stdout: io.StringIO,
+        stderr: io.StringIO,
+        message: str,
+    ) -> Union[Tuple[Any, str, str], None]:
         """
         Handles what happens when executing the function on the remote host fails.
+
+        Args:
+            fn: The function to be executed.
+            kwargs: The input arguments to the function.
+            stdout: an i/o object used for logging statements.
+            stderr: an i/o object used for logging errors.
+            message: The warning/error message to be displayed.
+
+        Returns:
+            Either a tuple consisting of the function result, stdout and stderr, if
+                self.run_local_on_ssh_fail == True, or None otherwise.
         """
+
         if self.run_local_on_ssh_fail:
             app_log.warning(message)
             result = fn(**kwargs)
@@ -277,7 +297,7 @@ class SSHExecutor(BaseExecutor):
             app_log.error(message)
             raise RuntimeError
 
-    def _client_connect(self) -> None:
+    def _client_connect(self) -> bool:
         """
         Helper function for connecting to the remote host through the paramiko module.
 
@@ -285,9 +305,11 @@ class SSHExecutor(BaseExecutor):
             None
 
         Returns:
-            None
+            True if connection to the remote host was successful, False otherwise.
         """
+
         self.client = paramiko.SSHClient()
+        self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         ssh_success = False
         if os.path.exists(self.hosts):
