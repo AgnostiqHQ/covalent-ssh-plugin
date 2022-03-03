@@ -31,22 +31,19 @@ with open("VERSION") as f:
 with open("requirements.txt") as f:
     required = f.read().splitlines()
 
-# Modify this to be the name of your plugin file
-plugins_list = ["custom = custom"]
+plugins_list = ["ssh_executor = covalent_ssh_plugin.ssh_executor"]
 
 setup_info = {
-    # Your plugin should use the naming convention 'covalent-abcdef-plugin'
-    "name": "covalent-executor-template",
+    "name": "covalent-ssh-plugin",
     "packages": find_packages("."),
     "version": version,
-    # Modify any contact information as you see fit
     "maintainer": "Agnostiq",
-    "url": "https://github.com/AgnostiqHQ/covalent-executor-template",
-    "download_url": f"https://github.com/AgnostiqHQ/covalent-executor-template/archive/v{version}.tar.gz",
+    "url": "https://github.com/AgnostiqHQ/covalent-ssh-plugin",
+    "download_url": f"https://github.com/AgnostiqHQ/covalent-ssh-plugin/archive/v{version}.tar.gz",
     "license": "GNU Affero GPL v3.0",
     "author": "Agnostiq",
     "author_email": "support@agnostiq.ai",
-    "description": "Covalent Custom Executor Plugin",
+    "description": "Covalent SSH Executor Plugin",
     "long_description": open("README.md").read(),
     "long_description_content_type": "text/markdown",
     "include_package_data": True,
