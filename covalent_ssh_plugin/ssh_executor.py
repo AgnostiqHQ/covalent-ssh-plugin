@@ -137,7 +137,7 @@ class SSHExecutor(BaseExecutor):
         exec_script = "\n".join(
             [
                 "import sys",
-                "from covalent import executor" "",
+                "",
                 "try:",
                 "    import cloudpickle as pickle",
                 "except ModuleNotFoundError:",
