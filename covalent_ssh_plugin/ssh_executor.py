@@ -58,7 +58,6 @@ class SSHExecutor(BaseExecutor):
         hostname: str,
         ssh_dir: str = os.environ["HOME"] + "/.ssh",
         remote_dir: str = ".cache/covalent",
-        ssh_pub_key: str = "",
         python3_path: str = "",
         run_local_on_ssh_fail: bool = False,
         *args,
@@ -69,13 +68,7 @@ class SSHExecutor(BaseExecutor):
         self.hostname = hostname
         self.ssh_dir = ssh_dir
         self.remote_dir = remote_dir
-
-        if ssh_pub_key != "":
-            self.ssh_pub_key = ssh_pub_key
-            self.hosts = None
-        else:
-            self.ssh_pub_key = None
-            self.hosts = os.path.join(self.ssh_dir, "known_hosts")
+        self.hosts = os.path.join(self.ssh_dir, "known_hosts")
 
         self.python3_path = python3_path
         self.run_local_on_ssh_fail = run_local_on_ssh_fail
@@ -257,12 +250,6 @@ class SSHExecutor(BaseExecutor):
             params["executors"]["ssh_executor"]["remote_dir"] = self.remote_dir
 
         try:
-            get_config("executors.ssh_executor.ssh_pub_key")
-        except KeyError:
-            if self.ssh_pub_key:
-                params["executors"]["ssh_executor"]["ssh_pub_key"] = self.ssh_pub_key
-
-        try:
             get_config("executors.ssh_executor.python3_path")
         except KeyError:
             if self.python3_path != "":
@@ -303,36 +290,20 @@ class SSHExecutor(BaseExecutor):
         self.client = paramiko.SSHClient()
 
         ssh_success = False
-        if self.hosts:
-            if os.path.exists(self.hosts):
-                self.client.load_host_keys(self.hosts)
-                try:
-                    self.client.connect(
-                        self.hostname,
-                        username=self.username,
-                    )
-                    ssh_success = True
-                except paramiko.ssh_exception.SSHException as e:
-                    app_log.error(e)
+        if os.path.exists(self.hosts):
+            self.client.load_host_keys(self.hosts)
+            try:
+                self.client.connect(
+                    self.hostname,
+                    username=self.username,
+                )
+                ssh_success = True
+            except paramiko.ssh_exception.SSHException as e:
+                app_log.error(e)
 
-            else:
-                message = "no 'known_hosts' file found. Cannot connect to untrusted hosts."
-                app_log.error(message)
-
-        elif self.ssh_pub_key:
-            if os.path.exists(self.ssh_pub_key):
-                try:
-                    self.client.connect(
-                        self.hostname,
-                        username=self.username,
-                        key_filename=self.ssh_pub_key,
-                    )
-                    ssh_success = True
-                except paramiko.ssh_exception.SSHException as e:
-                    app_log.error(e)
-            else:
-                message = f"Key file {self.ssh_pub_key} not found."
-                app_log.error(message)
+        else:
+            message = "no 'known_hosts' file found. Cannot connect to untrusted hosts."
+            app_log.error(message)
 
         if ssh_success:
             self.scp = SCPClient(self.client.get_transport())
