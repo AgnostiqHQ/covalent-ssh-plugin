@@ -46,6 +46,15 @@ executor_plugin_name = "SSHExecutor"
 app_log = logger.app_log
 log_stack_info = logger.log_stack_info
 
+_EXECUTOR_PLUGIN_DEFAULTS = {
+    "username": "",
+    "hostname": "",
+    "ssh_dir": os.path.join(os.environ["HOME"], ".ssh"),
+    "remote_dir": ".cache/covalent",
+    "python3_path": "",
+    "run_local_on_ssh_fail": False,
+}
+
 
 class SSHExecutor(BaseExecutor):
     """
@@ -56,7 +65,7 @@ class SSHExecutor(BaseExecutor):
         self,
         username: str,
         hostname: str,
-        ssh_dir: str = os.environ["HOME"] + "/.ssh",
+        ssh_dir: str = os.path.join(os.environ["HOME"], ".ssh"),
         remote_dir: str = ".cache/covalent",
         python3_path: str = "",
         run_local_on_ssh_fail: bool = False,
