@@ -99,8 +99,8 @@ class SSHExecutor(BaseExecutor):
     def execute(
         self,
         function: TransportableObject,
-        execution_args: dict,
-        kwargs: Any,
+        args: list,
+        kwargs: dict,
         dispatch_id: str,
         results_dir: str,
         node_id: int = -1,
@@ -111,10 +111,11 @@ class SSHExecutor(BaseExecutor):
         Args:
             function: The input python function which will be executed and whose result
                       is ultimately returned by this function.
-            kwargs: Keyword arguments to be used by function.
-            execution_args: Executor-specific arguments.
+            args: List of positional arguments to be used by the function.
+            kwargs: Dictionary of keyword arguments to be used by the function.
             dispatch_id: The unique identifier of the external lattice process which is
                          calling this function.
+            results_dir: The location of the results directory.
             node_id: The node ID of this task in the bigger workflow graph.
 
         Returns:
