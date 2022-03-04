@@ -189,8 +189,7 @@ class SSHExecutor(BaseExecutor):
             self.scp.put(script_file, remote_script_file)
 
             # Run the function:
-            cmd = f"{self.python3_path} {remote_script_file}\n"
-            cmd = f"conda activate cova && python3 {remote_script_file}"
+            cmd = f"{self.python3_path} {remote_script_file}"
             client_in, client_out, client_err = self.client.exec_command(cmd)
             err = client_err.read().decode("utf8").strip()
             if err != "":
