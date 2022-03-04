@@ -162,55 +162,58 @@ class SSHExecutor(BaseExecutor):
         with self.get_dispatch_context(dispatch_info), redirect_stdout(
             io.StringIO()
         ) as stdout, redirect_stderr(io.StringIO()) as stderr:
+            pass
 
-            if not ssh_success:
-                message = f"Could not connect to host {self.hostname} as user {self.username}"
-                return self._on_ssh_fail(fn, kwargs, stdout, stderr, message)
+        if not ssh_success:
+            message = f"Could not connect to host {self.hostname} as user {self.username}"
+            return self._on_ssh_fail(fn, kwargs, stdout, stderr, message)
 
-            message = f"Executing node {node_id} on host {self.hostname}."
-            app_log.debug(message)
+        message = f"Executing node {node_id} on host {self.hostname}."
+        app_log.debug(message)
 
+        if self.python3_path == "":
+            cmd = "which python3"
+            client_in, client_out, client_err = self.client.exec_command(cmd)
+            self.python3_path = client_out.read().decode("utf8").strip()
             if self.python3_path == "":
-                cmd = "which python3"
-                client_in, client_out, client_err = self.client.exec_command(cmd)
-                self.python3_path = client_out.read().decode("utf8").strip()
-                if self.python3_path == "":
-                    message = f"No Python 3 installation found on host machine {self.hostname}"
-                    return self._on_ssh_fail(fn, kwargs, stdout, stderr, message)
-
-            cmd = f"mkdir -p {self.remote_dir}"
-            client_in, client_out, client_err = self.client.exec_command(cmd)
-            err = client_err.read().decode("utf8")
-            if err != "":
-                app_log.warning(err)
-
-            # scp pickled function and run script to server here:
-            self.scp.put(function_file, remote_function_file)
-            self.scp.put(script_file, remote_script_file)
-
-            # Run the function:
-            cmd = f"{self.python3_path} {remote_script_file}"
-            client_in, client_out, client_err = self.client.exec_command(cmd)
-            err = client_err.read().decode("utf8").strip()
-            if err != "":
-                app_log.warning(err)
-
-            # Check that a result file was produced:
-            cmd = f"ls {remote_result_file}"
-            client_in, client_out, client_err = self.client.exec_command(cmd)
-            if client_out.read().decode("utf8").strip() != remote_result_file:
-                message = f"Result file {remote_result_file} on remote host {self.hostname} was not found"
+                message = f"No Python 3 installation found on host machine {self.hostname}"
                 return self._on_ssh_fail(fn, kwargs, stdout, stderr, message)
 
-            # scp the pickled result to the local machine here:
-            result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
-            self.scp.get(remote_result_file, result_file)
+        cmd = f"mkdir -p {self.remote_dir}"
+        client_in, client_out, client_err = self.client.exec_command(cmd)
+        err = client_err.read().decode("utf8")
+        if err != "":
+            app_log.warning(err)
 
-            # Load the result file:
-            with open(result_file, "rb") as f_in:
-                result = pickle.load(f_in)
+        # scp pickled function and run script to server here:
+        self.scp.put(function_file, remote_function_file)
+        self.scp.put(script_file, remote_script_file)
 
-            self.client.close()
+        # Run the function:
+        cmd = f"{self.python3_path} {remote_script_file}"
+        client_in, client_out, client_err = self.client.exec_command(cmd)
+        err = client_err.read().decode("utf8").strip()
+        if err != "":
+            app_log.warning(err)
+
+        # Check that a result file was produced:
+        cmd = f"ls {remote_result_file}"
+        client_in, client_out, client_err = self.client.exec_command(cmd)
+        if client_out.read().decode("utf8").strip() != remote_result_file:
+            message = (
+                f"Result file {remote_result_file} on remote host {self.hostname} was not found"
+            )
+            return self._on_ssh_fail(fn, kwargs, stdout, stderr, message)
+
+        # scp the pickled result to the local machine here:
+        result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
+        self.scp.get(remote_result_file, result_file)
+
+        # Load the result file:
+        with open(result_file, "rb") as f_in:
+            result = pickle.load(f_in)
+
+        self.client.close()
 
         return (result, stdout.getvalue(), stderr.getvalue())
 
