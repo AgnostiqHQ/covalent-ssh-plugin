@@ -69,7 +69,6 @@ class SSHExecutor(BaseExecutor):
         remote_dir: str = ".cache/covalent",
         python3_path: str = "",
         run_local_on_ssh_fail: bool = False,
-        *args,
         **kwargs,
     ) -> None:
 
@@ -89,7 +88,6 @@ class SSHExecutor(BaseExecutor):
         if "cache_dir" not in kwargs:
             kwargs["cache_dir"] = get_config("dispatcher.cache_dir")
 
-        self.args = args
         self.kwargs = kwargs
 
         base_kwargs = {}
