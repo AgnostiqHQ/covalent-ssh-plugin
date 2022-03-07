@@ -19,7 +19,7 @@
 # Relief from the License may be granted by purchasing a commercial license.
 
 """
-Executor plugin for executing the function on a remote machine through ssh.
+Executor plugin for executing the function on a remote machine through SSH.
 """
 
 # Required for all executor plugins
@@ -237,42 +237,40 @@ class SSHExecutor(BaseExecutor):
             None
         """
 
-        params = {"executors": {"ssh_executor": {}}}
+        params = {"executors": {"ssh": {}}}
         try:
-            get_config("executors.ssh_executor.username")
+            get_config("executors.ssh.username")
         except KeyError:
-            params["executors"]["ssh_executor"]["username"] = self.username
+            params["executors"]["ssh"]["username"] = self.username
 
         try:
-            get_config("executors.ssh_executor.hostname")
+            get_config("executors.ssh.hostname")
         except KeyError:
-            params["executors"]["ssh_executor"]["hostname"] = self.hostname
+            params["executors"]["ssh"]["hostname"] = self.hostname
 
         try:
-            get_config("executors.ssh_executor.ssh_dir")
+            get_config("executors.ssh.ssh_dir")
         except KeyError:
             if self.ssh_dir != "":
-                params["executors"]["ssh_executor"]["ssh_dir"] = self.ssh_dir
+                params["executors"]["ssh"]["ssh_dir"] = self.ssh_dir
 
         try:
-            get_config("executors.ssh_executor.remote_dir")
+            get_config("executors.ssh.remote_dir")
         except KeyError:
-            params["executors"]["ssh_executor"]["remote_dir"] = self.remote_dir
+            params["executors"]["ssh"]["remote_dir"] = self.remote_dir
 
         try:
-            get_config("executors.ssh_executor.python3_path")
+            get_config("executors.ssh.python3_path")
         except KeyError:
             if self.python3_path != "":
-                params["executors"]["ssh_executor"]["python3_path"] = self.python3_path
+                params["executors"]["ssh"]["python3_path"] = self.python3_path
 
         try:
-            get_config("executors.ssh_executor.run_local_on_ssh_fail")
+            get_config("executors.ssh.run_local_on_ssh_fail")
         except KeyError:
-            params["executors"]["ssh_executor"][
-                "run_local_on_ssh_fail"
-            ] = self.run_local_on_ssh_fail
+            params["executors"]["ssh"]["run_local_on_ssh_fail"] = self.run_local_on_ssh_fail
 
-        if params != {"executors": {"ssh_executor": {}}}:
+        if params != {"executors": {"ssh": {}}}:
             update_config(params)
 
     def _on_ssh_fail(

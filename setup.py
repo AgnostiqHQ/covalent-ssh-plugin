@@ -31,7 +31,7 @@ with open("VERSION") as f:
 with open("requirements.txt") as f:
     required = f.read().splitlines()
 
-plugins_list = ["ssh_executor = covalent_ssh_plugin.ssh_executor"]
+plugins_list = ["ssh = covalent_ssh_plugin.ssh"]
 
 setup_info = {
     "name": "covalent-ssh-plugin",
