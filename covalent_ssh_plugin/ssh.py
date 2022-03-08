@@ -222,7 +222,6 @@ class SSHExecutor(BaseExecutor):
 
         return (result, stdout.getvalue(), stderr.getvalue())
 
-    # flake8: noqa: C901
     def _update_params(self) -> None:
         """
         Helper function for setting configuration values, if they were missing from the
@@ -236,40 +235,14 @@ class SSHExecutor(BaseExecutor):
         """
 
         params = {"executors": {"ssh": {}}}
-        try:
-            get_config("executors.ssh.username")
-        except KeyError:
-            params["executors"]["ssh"]["username"] = self.username
+        params["executors"]["ssh"]["username"] = self.username
+        params["executors"]["ssh"]["hostname"] = self.hostname
+        if self.ssh_dir != "":
+            params["executors"]["ssh"]["ssh_dir"] = self.ssh_dir
+        if self.python3_path != "":
+            params["executors"]["ssh"]["python3_path"] = self.python3_path
 
-        try:
-            get_config("executors.ssh.hostname")
-        except KeyError:
-            params["executors"]["ssh"]["hostname"] = self.hostname
-
-        try:
-            get_config("executors.ssh.ssh_dir")
-        except KeyError:
-            if self.ssh_dir != "":
-                params["executors"]["ssh"]["ssh_dir"] = self.ssh_dir
-
-        try:
-            get_config("executors.ssh.remote_dir")
-        except KeyError:
-            params["executors"]["ssh"]["remote_dir"] = self.remote_dir
-
-        try:
-            get_config("executors.ssh.python3_path")
-        except KeyError:
-            if self.python3_path != "":
-                params["executors"]["ssh"]["python3_path"] = self.python3_path
-
-        try:
-            get_config("executors.ssh.run_local_on_ssh_fail")
-        except KeyError:
-            params["executors"]["ssh"]["run_local_on_ssh_fail"] = self.run_local_on_ssh_fail
-
-        if params != {"executors": {"ssh": {}}}:
-            update_config(params)
+        update_config(params, override_existing=False)
 
     def _on_ssh_fail(
         self,
