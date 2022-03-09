@@ -49,7 +49,7 @@ log_stack_info = logger.log_stack_info
 _EXECUTOR_PLUGIN_DEFAULTS = {
     "username": "",
     "hostname": "",
-    "ssh_dir": os.path.join(os.environ["HOME"], ".ssh"),
+    "ssh_key_file": os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
     "remote_dir": ".cache/covalent",
     "python3_path": "",
     "run_local_on_ssh_fail": False,
@@ -65,7 +65,7 @@ class SSHExecutor(BaseExecutor):
         self,
         username: str,
         hostname: str,
-        ssh_dir: str = os.path.join(os.environ["HOME"], ".ssh"),
+        ssh_key_file: str = os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
         remote_dir: str = ".cache/covalent",
         python3_path: str = "",
         run_local_on_ssh_fail: bool = False,
@@ -74,9 +74,8 @@ class SSHExecutor(BaseExecutor):
 
         self.username = username
         self.hostname = hostname
-        self.ssh_dir = ssh_dir
+        self.ssh_key_file = ssh_key_file
         self.remote_dir = remote_dir
-        self.hosts = os.path.join(self.ssh_dir, "known_hosts")
 
         self.python3_path = python3_path
         self.run_local_on_ssh_fail = run_local_on_ssh_fail
@@ -192,9 +191,11 @@ class SSHExecutor(BaseExecutor):
             if err != "":
                 app_log.warning(err)
 
+            scp = SCPClient(self.client.get_transport())
+
             # scp pickled function and run script to server here:
-            self.scp.put(function_file, remote_function_file)
-            self.scp.put(script_file, remote_script_file)
+            scp.put(function_file, remote_function_file)
+            scp.put(script_file, remote_script_file)
 
             # Run the function:
             cmd = f"{self.python3_path} {remote_script_file}"
@@ -212,7 +213,7 @@ class SSHExecutor(BaseExecutor):
 
             # scp the pickled result to the local machine here:
             result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
-            self.scp.get(remote_result_file, result_file)
+            scp.get(remote_result_file, result_file)
 
             # Load the result file:
             with open(result_file, "rb") as f_in:
@@ -237,8 +238,8 @@ class SSHExecutor(BaseExecutor):
         params = {"executors": {"ssh": {}}}
         params["executors"]["ssh"]["username"] = self.username
         params["executors"]["ssh"]["hostname"] = self.hostname
-        if self.ssh_dir != "":
-            params["executors"]["ssh"]["ssh_dir"] = self.ssh_dir
+        if self.ssh_key_file != "":
+            params["executors"]["ssh"]["ssh_key_file"] = self.ssh_key_file
         if self.python3_path != "":
             params["executors"]["ssh"]["python3_path"] = self.python3_path
 
@@ -290,24 +291,19 @@ class SSHExecutor(BaseExecutor):
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         ssh_success = False
-        if os.path.exists(self.hosts):
-            self.client.load_host_keys(self.hosts)
+        if os.path.exists(self.ssh_key_file):
             try:
                 self.client.connect(
                     self.hostname,
                     username=self.username,
+                    key_filename=self.ssh_key_file,
                 )
                 ssh_success = True
             except paramiko.ssh_exception.SSHException as e:
                 app_log.error(e)
 
         else:
-            message = "no 'known_hosts' file found. Cannot connect to untrusted hosts."
+            message = "no SSH key file found. Cannot connect to host."
             app_log.error(message)
-
-        if ssh_success:
-            self.scp = SCPClient(self.client.get_transport())
-        else:
-            self.scp = None
 
         return ssh_success
