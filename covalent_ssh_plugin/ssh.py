@@ -136,7 +136,7 @@ class SSHExecutor(BaseExecutor):
         # Pickle and save location of the function and its arguments:
         function_file = os.path.join(self.cache_dir, f"function_{operation_id}.pkl")
         with open(function_file, "wb") as f_out:
-            pickle.dump((fn, kwargs), f_out)
+            pickle.dump((fn, args, kwargs), f_out)
         remote_function_file = os.path.join(self.remote_dir, f"function_{operation_id}.pkl")
 
         # Write the code that the remote server will use to execute the function.
@@ -151,8 +151,8 @@ class SSHExecutor(BaseExecutor):
                 "    sys.exit()",
                 "",
                 f"with open('{remote_function_file}', 'rb') as f_in:",
-                "    fn, kwargs = pickle.load(f_in)",
-                "result = fn(**kwargs)",
+                "    fn, args, kwargs = pickle.load(f_in)",
+                "result = fn(*args, **kwargs)",
                 "",
                 f"with open('{remote_result_file}','wb') as f_out:",
                 "    pickle.dump(result, f_out)",
@@ -274,7 +274,7 @@ class SSHExecutor(BaseExecutor):
             return (result, stdout.getvalue(), stderr.getvalue())
         else:
             app_log.error(message)
-            raise RuntimeError
+            raise RuntimeError(message)
 
     def _client_connect(self) -> bool:
         """
