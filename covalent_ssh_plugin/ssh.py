@@ -59,6 +59,14 @@ _EXECUTOR_PLUGIN_DEFAULTS = {
 class SSHExecutor(BaseExecutor):
     """
     Executor class that invokes the input function on a remote server.
+
+    Args:
+        username: Username used to authenticate over SSH.
+        hostname: Address or hostname of the remote server.
+        ssh_key_file: Filename of the private key used for authentication with the remote server.
+        remote_dir: Where files needed for the exection are kept on the remote server.
+        python3_path: The path to the Python 3 executable on the remote server.
+        kwargs: Key-word arguments to be passed to the parent class (BaseExecutor)
     """
 
     def __init__(
