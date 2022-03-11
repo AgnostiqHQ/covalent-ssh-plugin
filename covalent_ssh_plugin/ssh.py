@@ -73,10 +73,10 @@ class SSHExecutor(BaseExecutor):
         self,
         username: str,
         hostname: str,
-        ssh_key_file: str = os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
-        remote_dir: str = ".cache/covalent",
-        python3_path: str = "",
-        run_local_on_ssh_fail: bool = False,
+        ssh_key_file: str,
+        remote_dir: str,
+        python3_path: str,
+        run_local_on_ssh_fail,
         **kwargs,
     ) -> None:
 
@@ -152,11 +152,7 @@ class SSHExecutor(BaseExecutor):
         exec_script = "\n".join(
             [
                 "import sys",
-                "",
-                "try:",
-                "    import cloudpickle as pickle",
-                "except ModuleNotFoundError:",
-                "    sys.exit()",
+                "import cloudpickle as pickle",
                 "",
                 f"with open('{remote_function_file}', 'rb') as f_in:",
                 "    fn, args, kwargs = pickle.load(f_in)",
