@@ -226,8 +226,6 @@ class SSHExecutor(BaseExecutor):
             scp.put(function_file, remote_function_file)
             scp.put(script_file, remote_script_file)
 
-            app_log.warning(f"python path: {self.python3_path}")
-
             # Run the function:
             cmd = f"{self.python3_path} {remote_script_file}"
             client_in, client_out, client_err = self.client.exec_command(cmd)
