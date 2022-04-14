@@ -26,6 +26,7 @@ Executor plugin for executing the function on a remote machine through SSH.
 import io
 import os
 from contextlib import redirect_stderr, redirect_stdout
+from multiprocessing import Queue as MPQ
 from typing import Any, Callable, Tuple, Union
 
 # Executor-specific imports:
@@ -33,6 +34,7 @@ import cloudpickle as pickle
 import paramiko
 
 # Covalent imports
+from covalent._results_manager.result import Result
 from covalent._shared_files import logger
 from covalent._shared_files.config import get_config, update_config
 from covalent._shared_files.util_classes import DispatchInfo
@@ -50,7 +52,10 @@ _EXECUTOR_PLUGIN_DEFAULTS = {
     "username": "",
     "hostname": "",
     "ssh_key_file": os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
-    "remote_dir": ".cache/covalent",
+    "cache_dir": os.path.join(
+        os.environ.get("XDG_CACHE_HOME") or os.path.join(os.environ["HOME"], ".cache"), "covalent"
+    ),
+    "remote_cache_dir": ".cache/covalent",
     "python3_path": "",
     "run_local_on_ssh_fail": False,
 }
@@ -64,8 +69,11 @@ class SSHExecutor(BaseExecutor):
         username: Username used to authenticate over SSH.
         hostname: Address or hostname of the remote server.
         ssh_key_file: Filename of the private key used for authentication with the remote server.
-        remote_dir: Where files needed for the exection are kept on the remote server.
+        cache_dir: Local cache directory used by this executor for temporary files.
+        remote_cache_dir: Remote server cache directory used for temporary files.
         python3_path: The path to the Python 3 executable on the remote server.
+        run_local_on_ssh_fail: If True, and the execution fails to run on the remote server,
+            then the execution is run on the local machine.
         kwargs: Key-word arguments to be passed to the parent class (BaseExecutor)
     """
 
@@ -73,17 +81,22 @@ class SSHExecutor(BaseExecutor):
         self,
         username: str,
         hostname: str,
-        ssh_key_file: str,
-        remote_dir: str,
-        python3_path: str,
-        run_local_on_ssh_fail,
+        ssh_key_file: str = os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
+        cache_dir: str = os.path.join(
+            os.environ.get("XDG_CACHE_HOME") or os.path.join(os.environ["HOME"], ".cache"),
+            "covalent",
+        ),
+        remote_cache_dir: str = ".cache/covalent",
+        python3_path: str = "",
+        run_local_on_ssh_fail: bool = False,
         **kwargs,
     ) -> None:
 
         self.username = username
         self.hostname = hostname
         self.ssh_key_file = ssh_key_file
-        self.remote_dir = remote_dir
+        self.cache_dir = cache_dir
+        self.remote_cache_dir = remote_cache_dir
 
         self.python3_path = python3_path
         self.run_local_on_ssh_fail = run_local_on_ssh_fail
@@ -92,21 +105,13 @@ class SSHExecutor(BaseExecutor):
         # Write executor-specific parameters to the configuration file, if they were missing:
         self._update_params()
 
-        if "cache_dir" not in kwargs:
-            kwargs["cache_dir"] = get_config("dispatcher.cache_dir")
-
-        self.kwargs = kwargs
-
-        base_kwargs = {}
-        for key in self.kwargs:
+        base_kwargs = {"cache_dir": self.cache_dir}
+        for key in kwargs:
             if key in [
-                "log_stdout",
-                "log_stderr",
                 "conda_env",
-                "cache_dir",
                 "current_env_on_conda_fail",
             ]:
-                base_kwargs[key] = self.kwargs[key]
+                base_kwargs[key] = kwargs[key]
 
         super().__init__(**base_kwargs)
 
@@ -115,56 +120,75 @@ class SSHExecutor(BaseExecutor):
         function: TransportableObject,
         args: list,
         kwargs: dict,
+        info_queue: MPQ,
+        task_id: int,
         dispatch_id: str,
         results_dir: str,
-        node_id: int = -1,
     ) -> Any:
         """
         Executes the input function and returns the result.
 
         Args:
             function: The input python function which will be executed and whose result
-                      is ultimately returned by this function.
+                is ultimately returned by this function.
             args: List of positional arguments to be used by the function.
             kwargs: Dictionary of keyword arguments to be used by the function.
+            info_queue: A multiprocessing Queue object used for shared variables across
+                processes. Information about, eg, status, can be stored here.
+            task_id: The ID of this task in the bigger workflow graph.
             dispatch_id: The unique identifier of the external lattice process which is
-                         calling this function.
+                calling this function.
             results_dir: The location of the results directory.
-            node_id: The node ID of this task in the bigger workflow graph.
 
         Returns:
             output: The result of the executed function.
         """
 
-        operation_id = f"{dispatch_id}_{node_id}"
+        operation_id = f"{dispatch_id}_{task_id}"
 
         dispatch_info = DispatchInfo(dispatch_id)
         fn = function.get_deserialized()
 
+        exception = None
+        info_dict = {"STATUS": Result.RUNNING}
+        info_queue.put_nowait(info_dict)
+
         # Pickle and save location of the function and its arguments:
         function_file = os.path.join(self.cache_dir, f"function_{operation_id}.pkl")
         with open(function_file, "wb") as f_out:
-            pickle.dump((fn, args, kwargs), f_out)
-        remote_function_file = os.path.join(self.remote_dir, f"function_{operation_id}.pkl")
+            pickle.dump((fn, kwargs), f_out)
+        remote_function_file = os.path.join(self.remote_cache_dir, f"function_{operation_id}.pkl")
 
         # Write the code that the remote server will use to execute the function.
-        remote_result_file = os.path.join(self.remote_dir, f"result_{operation_id}.pkl")
+        remote_result_file = os.path.join(self.remote_cache_dir, f"result_{operation_id}.pkl")
         exec_script = "\n".join(
             [
                 "import sys",
-                "import cloudpickle as pickle",
+                "",
+                "result = None",
+                "exception = None",
+                "",
+                "try:",
+                "    import cloudpickle as pickle",
+                "except Exception as e:",
+                f"    with open('{remote_result_file}','wb') as f_out:",
+                "        pickle.dump((None, e), f_out)",
+                "        return",
                 "",
                 f"with open('{remote_function_file}', 'rb') as f_in:",
-                "    fn, args, kwargs = pickle.load(f_in)",
-                "result = fn(*args, **kwargs)",
+                "    fn, kwargs = pickle.load(f_in)",
+                "    try:",
+                "        result = fn(**kwargs)",
+                "    except Exception as e:",
+                "        exception = e",
                 "",
                 f"with open('{remote_result_file}','wb') as f_out:",
-                "    pickle.dump(result, f_out)",
+                "    pickle.dump((result, exception), f_out)",
                 "",
             ]
         )
         script_file = os.path.join(self.cache_dir, f"exec_{operation_id}.py")
-        remote_script_file = os.path.join(self.remote_dir, f"exec_{operation_id}.py")
+        remote_script_file = os.path.join(self.remote_cache_dir, f"exec_{operation_id}.py")
         with open(script_file, "w") as f_out:
             f_out.write(exec_script)
 
@@ -178,7 +202,7 @@ class SSHExecutor(BaseExecutor):
                 message = f"Could not connect to host {self.hostname} as user {self.username}"
                 return self._on_ssh_fail(fn, kwargs, stdout, stderr, message)
 
-            message = f"Executing node {node_id} on host {self.hostname}."
+            message = f"Executing node {task_id} on host {self.hostname}."
             app_log.debug(message)
 
             if self.python3_path == "":
@@ -189,7 +213,7 @@ class SSHExecutor(BaseExecutor):
                     message = f"No Python 3 installation found on host machine {self.hostname}"
                     return self._on_ssh_fail(fn, kwargs, stdout, stderr, message)
 
-            cmd = f"mkdir -p {self.remote_dir}"
+            cmd = f"mkdir -p {self.remote_cache_dir}"
             client_in, client_out, client_err = self.client.exec_command(cmd)
             err = client_err.read().decode("utf8")
             if err != "":
@@ -221,11 +245,16 @@ class SSHExecutor(BaseExecutor):
 
             # Load the result file:
             with open(result_file, "rb") as f_in:
-                result = pickle.load(f_in)
+                result, exception = pickle.load(f_in)
 
         self.client.close()
 
-        return (result, stdout.getvalue(), stderr.getvalue())
+        # Update the status:
+        info_dict = info_queue.get()
+        info_dict["STATUS"] = Result.FAILED if result is None else Result.COMPLETED
+        info_queue.put(info_dict)
+
+        return (result, stdout.getvalue(), stderr.getvalue(), exception)
 
     def _update_params(self) -> None:
         """
@@ -268,17 +297,27 @@ class SSHExecutor(BaseExecutor):
             message: The warning/error message to be displayed.
 
         Returns:
-            Either a tuple consisting of the function result, stdout and stderr, if
-                self.run_local_on_ssh_fail == True, or None otherwise.
+            Either a tuple consisting of
+                a) the function result, stdout, stderr and Python exception (if any), if
+                    self.run_local_on_ssh_fail == True, or
+                b) (None, "", "", RuntimeError) if self.run_local_on_ssh_fail == False.
         """
 
         if self.run_local_on_ssh_fail:
             app_log.warning(message)
-            result = fn(**kwargs)
-            return (result, stdout.getvalue(), stderr.getvalue())
+
+            result = None
+            exception = None
+
+            try:
+                result = fn(**kwargs)
+            except Exception as e:
+                exception = e
+
+            return (result, stdout.getvalue(), stderr.getvalue(), exception)
         else:
             app_log.error(message)
-            raise RuntimeError(message)
+            return (None, "", "", RuntimeError)
 
     def _client_connect(self) -> bool:
         """
@@ -311,3 +350,18 @@ class SSHExecutor(BaseExecutor):
             app_log.error(message)
 
         return ssh_success
+
+    def get_status(self, info_dict: dict) -> Result:
+        """
+        Get the current status of the task.
+
+        Args:
+            info_dict: a dictionary containing any neccessary parameters needed to query the
+                status. For this class (LocalExecutor), the only info is given by the
+                "STATUS" key in info_dict.
+
+        Returns:
+            A Result status object (or None, if "STATUS" is not in info_dict).
+        """
+
+        return info_dict.get("STATUS", Result.NEW_OBJ)
