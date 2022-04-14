@@ -171,9 +171,10 @@ class SSHExecutor(BaseExecutor):
                 "try:",
                 "    import cloudpickle as pickle",
                 "except Exception as e:",
+                "    import pickle",
                 f"    with open('{remote_result_file}','wb') as f_out:",
                 "        pickle.dump((None, e), f_out)",
-                "        return",
+                "        exit()",
                 "",
                 f"with open('{remote_function_file}', 'rb') as f_in:",
                 "    fn, kwargs = pickle.load(f_in)",
@@ -224,6 +225,8 @@ class SSHExecutor(BaseExecutor):
             # scp pickled function and run script to server here:
             scp.put(function_file, remote_function_file)
             scp.put(script_file, remote_script_file)
+
+            app_log.warning(f"python path: {self.python3_path}")
 
             # Run the function:
             cmd = f"{self.python3_path} {remote_script_file}"
