@@ -156,10 +156,15 @@ class SSHExecutor(BaseExecutor):
         # Pickle and save location of the function and its arguments:
         function_file = os.path.join(self.cache_dir, f"function_{operation_id}.pkl")
         with open(function_file, "wb") as f_out:
-            pickle.dump((fn, kwargs), f_out)
+            pickle.dump((fn, args, kwargs), f_out)
         remote_function_file = os.path.join(self.remote_cache_dir, f"function_{operation_id}.pkl")
 
         # Write the code that the remote server will use to execute the function.
+
+        message = f"Function file names:\nLocal function file: {function_file}\n"
+        message += f"Remote function file: {remote_function_file}"
+        app_log.debug(message)
+
         remote_result_file = os.path.join(self.remote_cache_dir, f"result_{operation_id}.pkl")
         exec_script = "\n".join(
             [
@@ -177,9 +182,9 @@ class SSHExecutor(BaseExecutor):
                 "        exit()",
                 "",
                 f"with open('{remote_function_file}', 'rb') as f_in:",
-                "    fn, kwargs = pickle.load(f_in)",
+                "    fn, args, kwargs = pickle.load(f_in)",
                 "    try:",
-                "        result = fn(**kwargs)",
+                "        result = fn(*args, **kwargs)",
                 "    except Exception as e:",
                 "        exception = e",
                 "",
@@ -201,7 +206,7 @@ class SSHExecutor(BaseExecutor):
 
             if not ssh_success:
                 message = f"Could not connect to host {self.hostname} as user {self.username}"
-                return self._on_ssh_fail(fn, kwargs, stdout, stderr, message)
+                return self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
 
             message = f"Executing node {task_id} on host {self.hostname}."
             app_log.debug(message)
@@ -210,9 +215,10 @@ class SSHExecutor(BaseExecutor):
                 cmd = "which python3"
                 client_in, client_out, client_err = self.client.exec_command(cmd)
                 self.python3_path = client_out.read().decode("utf8").strip()
+
                 if self.python3_path == "":
                     message = f"No Python 3 installation found on host machine {self.hostname}"
-                    return self._on_ssh_fail(fn, kwargs, stdout, stderr, message)
+                    return self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
 
             cmd = f"mkdir -p {self.remote_cache_dir}"
             client_in, client_out, client_err = self.client.exec_command(cmd)
@@ -238,7 +244,7 @@ class SSHExecutor(BaseExecutor):
             client_in, client_out, client_err = self.client.exec_command(cmd)
             if client_out.read().decode("utf8").strip() != remote_result_file:
                 message = f"Result file {remote_result_file} on remote host {self.hostname} was not found"
-                return self._on_ssh_fail(fn, kwargs, stdout, stderr, message)
+                return self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
 
             # scp the pickled result to the local machine here:
             result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
@@ -247,6 +253,9 @@ class SSHExecutor(BaseExecutor):
             # Load the result file:
             with open(result_file, "rb") as f_in:
                 result, exception = pickle.load(f_in)
+
+            if exception is not None:
+                app_log.debug(f"exception: {exception}")
 
         self.client.close()
 
@@ -282,6 +291,7 @@ class SSHExecutor(BaseExecutor):
     def _on_ssh_fail(
         self,
         fn: Callable,
+        args: list,
         kwargs: dict,
         stdout: io.StringIO,
         stderr: io.StringIO,
@@ -311,7 +321,7 @@ class SSHExecutor(BaseExecutor):
             exception = None
 
             try:
-                result = fn(**kwargs)
+                result = fn(*args, **kwargs)
             except Exception as e:
                 exception = e
 
