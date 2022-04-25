@@ -154,51 +154,6 @@ class SSHExecutor(BaseExecutor):
         info_dict = {"STATUS": Result.RUNNING}
         info_queue.put_nowait(info_dict)
 
-        # Pickle and save location of the function and its arguments:
-        function_file = os.path.join(self.cache_dir, f"function_{operation_id}.pkl")
-        with open(function_file, "wb") as f_out:
-            pickle.dump((fn, args, kwargs), f_out)
-        remote_function_file = os.path.join(self.remote_cache_dir, f"function_{operation_id}.pkl")
-
-        # Write the code that the remote server will use to execute the function.
-
-        message = f"Function file names:\nLocal function file: {function_file}\n"
-        message += f"Remote function file: {remote_function_file}"
-        app_log.debug(message)
-
-        remote_result_file = os.path.join(self.remote_cache_dir, f"result_{operation_id}.pkl")
-        exec_script = "\n".join(
-            [
-                "import sys",
-                "",
-                "result = None",
-                "exception = None",
-                "",
-                "try:",
-                "    import cloudpickle as pickle",
-                "except Exception as e:",
-                "    import pickle",
-                f"    with open('{remote_result_file}','wb') as f_out:",
-                "        pickle.dump((None, e), f_out)",
-                "        exit()",
-                "",
-                f"with open('{remote_function_file}', 'rb') as f_in:",
-                "    fn, args, kwargs = pickle.load(f_in)",
-                "    try:",
-                "        result = fn(*args, **kwargs)",
-                "    except Exception as e:",
-                "        exception = e",
-                "",
-                f"with open('{remote_result_file}','wb') as f_out:",
-                "    pickle.dump((result, exception), f_out)",
-                "",
-            ]
-        )
-        script_file = os.path.join(self.cache_dir, f"exec_{operation_id}.py")
-        remote_script_file = os.path.join(self.remote_cache_dir, f"exec_{operation_id}.py")
-        with open(script_file, "w") as f_out:
-            f_out.write(exec_script)
-
         ssh_success = self._client_connect()
 
         with self.get_dispatch_context(dispatch_info), redirect_stdout(
@@ -227,29 +182,36 @@ class SSHExecutor(BaseExecutor):
             if err != "":
                 app_log.warning(err)
 
-            scp = SCPClient(self.client.get_transport())
+            # Pickle and save location of the function and its arguments:
+            self._write_function_files(
+                 operation_id,
+                 fn,
+                 args,
+                 kwargs
+             )
 
             # scp pickled function and run script to server here:
-            scp.put(function_file, remote_function_file)
-            scp.put(script_file, remote_script_file)
+            scp = SCPClient(self.client.get_transport())
+            scp.put(self.function_file, self.remote_function_file)
+            scp.put(self.script_file, self.remote_script_file)
 
             # Run the function:
-            cmd = f"{self.python3_path} {remote_script_file}"
+            cmd = f"{self.python3_path} {self.remote_script_file}"
             client_in, client_out, client_err = self.client.exec_command(cmd)
             err = client_err.read().decode("utf8").strip()
             if err != "":
                 app_log.warning(err)
 
             # Check that a result file was produced:
-            cmd = f"ls {remote_result_file}"
+            cmd = f"ls {self.remote_result_file}"
             client_in, client_out, client_err = self.client.exec_command(cmd)
-            if client_out.read().decode("utf8").strip() != remote_result_file:
-                message = f"Result file {remote_result_file} on remote host {self.hostname} was not found"
+            if client_out.read().decode("utf8").strip() != self.remote_result_file:
+                message = f"Result file {self.remote_result_file} on remote host {self.hostname} was not found"
                 return self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
 
             # scp the pickled result to the local machine here:
             result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
-            scp.get(remote_result_file, result_file)
+            scp.get(self.remote_result_file, result_file)
 
             # Load the result file:
             with open(result_file, "rb") as f_in:
@@ -266,6 +228,70 @@ class SSHExecutor(BaseExecutor):
         info_queue.put(info_dict)
 
         return (result, stdout.getvalue(), stderr.getvalue(), exception)
+
+    def _write_function_files(
+            self,
+            operation_id: str,
+            fn: Callable,
+            args: list,
+            kwargs: dict,
+        ) -> None:
+        """
+        Helper function to pickle the function to be executoed to file, and write the
+            python script which calls the function.
+
+        Args:
+            operation_id: A concatenation of the dispatch ID and task ID.
+            fn: The input python function which will be executed and whose result
+                is ultimately returned by this function.
+            args: List of positional arguments to be used by the function.
+            kwargs: Dictionary of keyword arguments to be used by the function.
+        """
+
+        # Pickle and save location of the function and its arguments:
+        self.function_file = os.path.join(self.cache_dir, f"function_{operation_id}.pkl")
+        with open(self.function_file, "wb") as f_out:
+            pickle.dump((fn, args, kwargs), f_out)
+        self.remote_function_file = os.path.join(self.remote_cache_dir, f"function_{operation_id}.pkl")
+
+        # Write the code that the remote server will use to execute the function.
+
+        message = f"Function file names:\nLocal function file: {self.function_file}\n"
+        message += f"Remote function file: {self.remote_function_file}"
+        app_log.debug(message)
+
+        self.remote_result_file = os.path.join(self.remote_cache_dir, f"result_{operation_id}.pkl")
+        exec_script = "\n".join(
+            [
+                "import sys",
+                "",
+                "result = None",
+                "exception = None",
+                "",
+                "try:",
+                "    import cloudpickle as pickle",
+                "except Exception as e:",
+                "    import pickle",
+                f"    with open('{self.remote_result_file}','wb') as f_out:",
+                "        pickle.dump((None, e), f_out)",
+                "        exit()",
+                "",
+                f"with open('{self.remote_function_file}', 'rb') as f_in:",
+                "    fn, args, kwargs = pickle.load(f_in)",
+                "    try:",
+                "        result = fn(*args, **kwargs)",
+                "    except Exception as e:",
+                "        exception = e",
+                "",
+                f"with open('{self.remote_result_file}','wb') as f_out:",
+                "    pickle.dump((result, exception), f_out)",
+                "",
+            ]
+        )
+        self.script_file = os.path.join(self.cache_dir, f"exec_{operation_id}.py")
+        self.remote_script_file = os.path.join(self.remote_cache_dir, f"exec_{operation_id}.py")
+        with open(self.script_file, "w") as f_out:
+            f_out.write(exec_script)
 
     def _update_params(self) -> None:
         """
