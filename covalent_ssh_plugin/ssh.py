@@ -31,6 +31,7 @@ from typing import Any, Callable, Tuple, Union
 
 # Executor-specific imports:
 import cloudpickle as pickle
+import socket
 import paramiko
 
 # Covalent imports
@@ -205,7 +206,7 @@ class SSHExecutor(BaseExecutor):
         ) as stdout, redirect_stderr(io.StringIO()) as stderr:
 
             if not ssh_success:
-                message = f"Could not connect to host {self.hostname} as user {self.username}"
+                message = f"Could not connect to host '{self.hostname}' as user '{self.username}'"
                 return self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
 
             message = f"Executing node {task_id} on host {self.hostname}."
@@ -353,7 +354,14 @@ class SSHExecutor(BaseExecutor):
                     key_filename=self.ssh_key_file,
                 )
                 ssh_success = True
-            except paramiko.ssh_exception.SSHException as e:
+            except (
+                paramiko.ssh_exception.SSHException,
+                socket.gaierror,
+                ValueError,
+                TimeoutError
+            ) as e:
+                # socket.gaierror is raised when the hostname does not exist.
+                # ValueError is raised when the username does not exist.
                 app_log.error(e)
 
         else:
