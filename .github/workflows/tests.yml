@@ -69,7 +69,7 @@ jobs:
         run: python -c "from covalent.executor import SSHExecutor"
       - name: Run tests
         run: |
-          PYTHONPATH=$PWD/tests pytest tests -vv
+          PYTHONPATH=$PWD/tests pytest tests/ssh_tests.py -vv
       - name: Push to main
         if: github.ref == 'refs/heads/develop' && matrix.os == 'ubuntu-latest' && matrix.container == 'python:3.8-buster'
         run: |
