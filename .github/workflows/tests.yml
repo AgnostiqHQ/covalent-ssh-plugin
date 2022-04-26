@@ -58,12 +58,18 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --no-cache-dir -r ./requirements.txt
+          pip install --no-cache-dir -r ./tests/requirements.txt
       - name: Install Covalent
         run: pip install cova --pre
       - name: Install SSH Plugin
         run: pip install -e .
+      - name: Start Covalent dispatcher server
+        run: covalent start
       - name: Test plugin loading
         run: python -c "from covalent.executor import SSHExecutor"
+      - name: Run tests
+        run: |
+          PYTHONPATH=$PWD/tests pytest tests -vv
       - name: Push to main
         if: github.ref == 'refs/heads/develop' && matrix.os == 'ubuntu-latest' && matrix.container == 'python:3.8-buster'
         run: |
