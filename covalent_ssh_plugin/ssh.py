@@ -22,10 +22,7 @@
 Executor plugin for executing the function on a remote machine through SSH.
 """
 
-dbgfile="/home/casey/Agnostiq/code/async_ssh_debug.log"
-
 # Required for all executor plugins
-import asyncssh
 import io
 import os
 import socket
@@ -34,9 +31,8 @@ from multiprocessing import Queue as MPQ
 from typing import Any, Callable, Tuple, Union
 
 # Executor-specific imports:
+import asyncssh
 import cloudpickle as pickle
-# import paramiko
-# from scp import SCPClient
 
 # Covalent imports
 from covalent._results_manager.result import Result
@@ -193,11 +189,11 @@ class SSHExecutor(BaseExecutor):
                     return (output, stdout, stderr)
 
             cmd = f"mkdir -p {self.remote_cache_dir}"
-            # client_in, client_out, client_err = self.client.exec_command(cmd)
+
             result = await conn.run(cmd)
             client_out = result.stdout
             client_err = result.stderr
-            # err = client_err.read().decode("utf8")
+
             err = client_err
             if err != "":
                 app_log.warning(err)
@@ -205,48 +201,30 @@ class SSHExecutor(BaseExecutor):
             # Pickle and save location of the function and its arguments:
             function_file, script_file, remote_function_file, remote_script_file, remote_result_file = self._write_function_files(operation_id, fn, args, kwargs)
 
-            # scp pickled function and run script to server here:
-            # scp = SCPClient(self.client.get_transport())
-            # scp.put(self.function_file, self.remote_function_file)
-            # scp.put(self.script_file, self.remote_script_file)
-
             await asyncssh.scp(function_file, (conn, remote_function_file))
-            with open(dbgfile, "a") as f:
-                print(f"{operation_id}: Copied local {function_file} to remote {remote_function_file}", file=f)
             await asyncssh.scp(script_file, (conn, remote_script_file))
-            with open(dbgfile, "a") as f:
-                print(f"{operation_id}: Copied local {script_file} to remote {remote_script_file}", file=f)
 
             # Run the function:
             cmd = f"{self.python3_path} {remote_script_file}"
-            # client_in, client_out, client_err = self.client.exec_command(cmd)
-            # err = client_err.read().decode("utf8").strip()
             result = await conn.run(cmd)
-            with open(dbgfile, "a") as f:
-                print(f"{operation_id}: Executed {remote_script_file}", file=f)
-
             err = result.stderr.strip()
             if err != "":
                 app_log.warning(err)
 
             # Check that a result file was produced:
             cmd = f"ls {remote_result_file}"
-            # client_in, client_out, client_err = self.client.exec_command(cmd)
             result = await conn.run(cmd)
             client_out = result.stdout
             if client_out.strip() != remote_result_file:
                 message = f"Result file {remote_result_file} on remote host {self.hostname} was not found"
-                output, stdout, stderr, exception self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
+                output, stdout, stderr, exception = self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
                 if exception:
                     raise exception
                 return (output, stdout, stderr)
 
             # scp the pickled result to the local machine here:
             result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
-            # scp.get(remote_result_file, result_file)
             await asyncssh.scp((conn, remote_result_file), result_file)
-            with open(dbgfile, "a") as f:
-                print(f"{operation_id}: Copied remote {remote_result_file} to local {result_file}", file=f)
 
             # Load the result file:
             with open(result_file, "rb") as f_in:
@@ -256,8 +234,7 @@ class SSHExecutor(BaseExecutor):
                 app_log.debug(f"exception: {exception}")
                 raise exception
 
-        #self.client.close()
-        conn.wait_closed()
+        conn.close()
 
         if info_queue:
             # Update the status:
@@ -290,8 +267,6 @@ class SSHExecutor(BaseExecutor):
 
         # Pickle and save location of the function and its arguments:
         function_file = os.path.join(self.cache_dir, f"function_{operation_id}.pkl")
-        with open(dbgfile, "a") as f:
-            print(f"{operation_id}: saving function file {function_file}", file=f)
 
         with open(function_file, "wb") as f_out:
             pickle.dump((fn, args, kwargs), f_out)
@@ -415,27 +390,9 @@ class SSHExecutor(BaseExecutor):
             True if connection to the remote host was successful, False otherwise.
         """
 
-        # self.client = paramiko.SSHClient()
-        # self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         ssh_success = False
         if os.path.exists(self.ssh_key_file):
-            # try:
-            #     self.client.connect(
-            #         self.hostname,
-            #         username=self.username,
-            #         key_filename=self.ssh_key_file,
-            #     )
-            #     ssh_success = True
-            # except (
-            #     paramiko.ssh_exception.SSHException,
-            #     socket.gaierror,
-            #     ValueError,
-            #     TimeoutError,
-            # ) as e:
-            #     # socket.gaierror is raised when the hostname does not exist.
-            #     # ValueError is raised when the username does not exist.
-            #     app_log.error(e)
             try:
                 conn = await asyncssh.connect(self.hostname,
                                                    username=self.username,
