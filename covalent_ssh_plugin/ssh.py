@@ -25,14 +25,15 @@ Executor plugin for executing the function on a remote machine through SSH.
 # Required for all executor plugins
 import io
 import os
+import socket
 from contextlib import redirect_stderr, redirect_stdout
 from multiprocessing import Queue as MPQ
 from typing import Any, Callable, Tuple, Union
 
 # Executor-specific imports:
 import cloudpickle as pickle
-import socket
 import paramiko
+from scp import SCPClient
 
 # Covalent imports
 from covalent._results_manager.result import Result
@@ -41,10 +42,9 @@ from covalent._shared_files.config import get_config, update_config
 from covalent._shared_files.util_classes import DispatchInfo
 from covalent._workflow.transport import TransportableObject
 from covalent.executor import BaseExecutor
-from scp import SCPClient
 
 # The plugin class name must be given by the EXECUTOR_PLUGIN_NAME attribute:
-EXECUTOR_PLUGIN_NAME = "SSHExecutor"
+executor_plugin_name = "SSHExecutor"
 
 app_log = logger.app_log
 log_stack_info = logger.log_stack_info
@@ -121,10 +121,10 @@ class SSHExecutor(BaseExecutor):
         function: TransportableObject,
         args: list,
         kwargs: dict,
-        info_queue: MPQ,
-        task_id: int,
         dispatch_id: str,
         results_dir: str,
+        node_id: int = -1,
+        info_queue: MPQ = None,
     ) -> Any:
         """
         Executes the input function and returns the result.
@@ -136,7 +136,7 @@ class SSHExecutor(BaseExecutor):
             kwargs: Dictionary of keyword arguments to be used by the function.
             info_queue: A multiprocessing Queue object used for shared variables across
                 processes. Information about, eg, status, can be stored here.
-            task_id: The ID of this task in the bigger workflow graph.
+            node_id: The ID of this task in the bigger workflow graph.
             dispatch_id: The unique identifier of the external lattice process which is
                 calling this function.
             results_dir: The location of the results directory.
@@ -145,14 +145,16 @@ class SSHExecutor(BaseExecutor):
             output: The result of the executed function.
         """
 
-        operation_id = f"{dispatch_id}_{task_id}"
+        operation_id = f"{dispatch_id}_{node_id}"
 
         dispatch_info = DispatchInfo(dispatch_id)
         fn = function.get_deserialized()
 
         exception = None
-        info_dict = {"STATUS": Result.RUNNING}
-        info_queue.put_nowait(info_dict)
+
+        if info_queue:
+            info_dict = {"STATUS": Result.RUNNING}
+            info_queue.put_nowait(info_dict)
 
         ssh_success = self._client_connect()
 
@@ -164,7 +166,7 @@ class SSHExecutor(BaseExecutor):
                 message = f"Could not connect to host '{self.hostname}' as user '{self.username}'"
                 return self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
 
-            message = f"Executing node {task_id} on host {self.hostname}."
+            message = f"Executing node {node_id} on host {self.hostname}."
             app_log.debug(message)
 
             if self.python3_path == "":
@@ -183,12 +185,7 @@ class SSHExecutor(BaseExecutor):
                 app_log.warning(err)
 
             # Pickle and save location of the function and its arguments:
-            self._write_function_files(
-                 operation_id,
-                 fn,
-                 args,
-                 kwargs
-             )
+            self._write_function_files(operation_id, fn, args, kwargs)
 
             # scp pickled function and run script to server here:
             scp = SCPClient(self.client.get_transport())
@@ -222,20 +219,23 @@ class SSHExecutor(BaseExecutor):
 
         self.client.close()
 
-        # Update the status:
-        info_dict = info_queue.get()
-        info_dict["STATUS"] = Result.FAILED if result is None else Result.COMPLETED
-        info_queue.put(info_dict)
+        if info_queue:
+            # Update the status:
+            info_dict = info_queue.get()
+            info_dict["STATUS"] = Result.FAILED if result is None else Result.COMPLETED
+            info_queue.put(info_dict)
 
-        return (result, stdout.getvalue(), stderr.getvalue(), exception)
+        # TODO: fix execution._run_task() to parse exception as in covalent-microservices
+        # return (result, stdout.getvalue(), stderr.getvalue(), exception)
+        return (result, stdout.getvalue(), stderr.getvalue())
 
     def _write_function_files(
-            self,
-            operation_id: str,
-            fn: Callable,
-            args: list,
-            kwargs: dict,
-        ) -> None:
+        self,
+        operation_id: str,
+        fn: Callable,
+        args: list,
+        kwargs: dict,
+    ) -> None:
         """
         Helper function to pickle the function to be executoed to file, and write the
             python script which calls the function.
@@ -252,7 +252,9 @@ class SSHExecutor(BaseExecutor):
         self.function_file = os.path.join(self.cache_dir, f"function_{operation_id}.pkl")
         with open(self.function_file, "wb") as f_out:
             pickle.dump((fn, args, kwargs), f_out)
-        self.remote_function_file = os.path.join(self.remote_cache_dir, f"function_{operation_id}.pkl")
+        self.remote_function_file = os.path.join(
+            self.remote_cache_dir, f"function_{operation_id}.pkl"
+        )
 
         # Write the code that the remote server will use to execute the function.
 
@@ -384,7 +386,7 @@ class SSHExecutor(BaseExecutor):
                 paramiko.ssh_exception.SSHException,
                 socket.gaierror,
                 ValueError,
-                TimeoutError
+                TimeoutError,
             ) as e:
                 # socket.gaierror is raised when the hostname does not exist.
                 # ValueError is raised when the username does not exist.
