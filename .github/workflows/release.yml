@@ -105,7 +105,7 @@ jobs:
           tail +$begin ./CHANGELOG.md | head -$end >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
-      name: Create release
+      - name: Create release
         if: >-
           ${{ (steps.push.outcome == 'success' || steps.no-push.outcome == 'success')
           && steps.message.outcome == 'success'
