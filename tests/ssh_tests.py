@@ -84,7 +84,7 @@ def test_on_ssh_fail():
         args = [5],
         kwargs = {},
         info_queue = MPQ(),
-        task_id = 0,
+        node_id = 0,
         dispatch_id = 0,
         results_dir = "./",
     )
@@ -96,7 +96,7 @@ def test_on_ssh_fail():
         args = [5],
         kwargs = {},
         info_queue = MPQ(),
-        task_id = 0,
+        node_id = 0,
         dispatch_id = 0,
         results_dir = "./",
     )
@@ -148,7 +148,7 @@ def test_deserialization(mocker):
         args = [5],
         kwargs = {},
         info_queue = MPQ(),
-        task_id = 0,
+        node_id = 0,
         dispatch_id = 0,
         results_dir = "./",
     )
