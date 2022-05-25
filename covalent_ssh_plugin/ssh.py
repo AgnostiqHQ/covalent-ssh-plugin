@@ -164,7 +164,10 @@ class SSHExecutor(BaseExecutor):
 
             if not ssh_success:
                 message = f"Could not connect to host '{self.hostname}' as user '{self.username}'"
-                return self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
+                output, stdout, stderr, exception = self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
+                if exception:
+                    raise exception
+                return (output, stdout, stderr)
 
             message = f"Executing node {node_id} on host {self.hostname}."
             app_log.debug(message)
@@ -176,7 +179,10 @@ class SSHExecutor(BaseExecutor):
 
                 if self.python3_path == "":
                     message = f"No Python 3 installation found on host machine {self.hostname}"
-                    return self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
+                    output, stdout, stderr, exception = self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
+                    if exception:
+                        raise exception
+                    return (output, stdout, stderr)
 
             cmd = f"mkdir -p {self.remote_cache_dir}"
             client_in, client_out, client_err = self.client.exec_command(cmd)
@@ -204,7 +210,10 @@ class SSHExecutor(BaseExecutor):
             client_in, client_out, client_err = self.client.exec_command(cmd)
             if client_out.read().decode("utf8").strip() != self.remote_result_file:
                 message = f"Result file {self.remote_result_file} on remote host {self.hostname} was not found"
-                return self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
+                output, stdout, stderr, exception = self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
+                if exception:
+                    raise exception
+                return (output, stdout, stderr)
 
             # scp the pickled result to the local machine here:
             result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
@@ -216,6 +225,7 @@ class SSHExecutor(BaseExecutor):
 
             if exception is not None:
                 app_log.debug(f"exception: {exception}")
+                raise exception
 
         self.client.close()
 
