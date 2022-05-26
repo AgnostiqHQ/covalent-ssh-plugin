@@ -25,6 +25,8 @@ import os
 from unittest.mock import patch, mock_open
 import pytest
 
+import pytest
+
 import covalent as ct
 from covalent._workflow.transport import TransportableObject
 from covalent.executor import SSHExecutor
@@ -80,28 +82,28 @@ def test_on_ssh_fail():
 
     transport_function = TransportableObject(simple_task)
 
-    result, _, _, _ = executor.execute(
+    result, _, _ = executor.execute(
         function = transport_function,
         args = [5],
         kwargs = {},
         info_queue = MPQ(),
-        task_id = 0,
+        node_id = 0,
         dispatch_id = 0,
         results_dir = "./",
     )
     assert result == 25
 
     executor.run_local_on_ssh_fail = False
-    result, _, _, _ = executor.execute(
-        function = transport_function,
-        args = [5],
-        kwargs = {},
-        info_queue = MPQ(),
-        task_id = 0,
-        dispatch_id = 0,
-        results_dir = "./",
-    )
-    assert result is None
+    with pytest.raises(RuntimeError):
+        result, _, _  = executor.execute(
+            function = transport_function,
+            args = [5],
+            kwargs = {},
+            info_queue = MPQ(),
+            node_id = 0,
+            dispatch_id = 0,
+            results_dir = "./",
+        )
 
 def test_client_connect(mocker):
     """Test that connection will fail if credentials are not supplied."""
@@ -144,15 +146,16 @@ def test_deserialization(mocker):
         return_value = simple_task,
     )
 
-    executor.execute(
-        function = transport_function,
-        args = [5],
-        kwargs = {},
-        info_queue = MPQ(),
-        task_id = 0,
-        dispatch_id = 0,
-        results_dir = "./",
-    )
+    with pytest.raises(RuntimeError):
+        executor.execute(
+            function = transport_function,
+            args = [5],
+            kwargs = {},
+            info_queue = MPQ(),
+            node_id = 0,
+            dispatch_id = 0,
+            results_dir = "./",
+        )
 
     deserizlized_mock.assert_called_once()
 

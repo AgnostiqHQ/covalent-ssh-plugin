@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+### Changed
+
+- New logo to reflect revamp in UI.
+- Backport some changes
+
+### Fixed
+
+- Handle exceptions correctly.
+- Fix return type when ssh connection fails.
+- Fix tests
+
 ## [0.2.2] - 2022-05-26
 
 ### Fixed
