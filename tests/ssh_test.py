@@ -23,6 +23,7 @@
 from multiprocessing import Queue as MPQ
 import os
 from unittest.mock import patch, mock_open
+import pytest
 
 import pytest
 

@@ -5,13 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.2] -- 2022-05-25
+## [UNRELEASED]
 
 ### Changed
 
 - New logo to reflect revamp in UI.
-
-## [0.3.1] -- 2022-05-25
+- Backport some changes
 
 ### Fixed
 
@@ -19,11 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix return type when ssh connection fails.
 - Fix tests
 
-## [0.3.0] -- 2022-05-16
+## [0.2.2] - 2022-05-26
 
-### Changed
+### Fixed
 
-- Backport to covalent-mono.
+- Fixed validating package tarball
+- Updated running tests via pytests
 
 ## [0.2.1] - 2022-04-26
 
