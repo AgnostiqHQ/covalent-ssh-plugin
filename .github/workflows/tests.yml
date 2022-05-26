@@ -43,7 +43,7 @@ jobs:
           - os: macos-latest
             python-version: '3.8'
             experimental: false
-        fail_fast: false
+        fail-fast: false
     container: ${{ matrix.container }}
     continue-on-error: ${{ matrix.experimental }}
     outputs:
