@@ -22,14 +22,15 @@ name: tests
 
 on: 
   pull_request:
-  push:
-    branches:
-      - develop
+  workflow_run:
+    workflows: [changelog]
+    types: [completed]
 
 jobs:
   tests:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: ['ubuntu-latest']
         container:
