@@ -75,7 +75,7 @@ jobs:
           VERSION="$(cat ./VERSION)"
           cd dist
           tar xzf covalent-ssh-plugin-${VERSION}.tar.gz
-          diff covalent-ssh-plugin-${VERSION}/covalent_ssh_plugin/ssh.py ../covalent_ssh_plugin/ssh.py
+          diff -r covalent-ssh-plugin-${VERSION}/covalent_ssh_plugin/ ../covalent_ssh_plugin/
           rm -rf covalent-ssh-plugin-${VERSION}/
           cd ..
 
@@ -92,7 +92,7 @@ jobs:
 
       - name: Run tests
         run: |
-          PYTHONPATH=$PWD/tests pytest -vv tests/ssh_tests.py
+          PYTHONPATH=$PWD/tests pytest -vv tests/
 
       - name: Get latest release
         uses: actions-ecosystem/action-get-latest-tag@v1
