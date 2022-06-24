@@ -40,7 +40,7 @@ from covalent._shared_files import logger
 from covalent._shared_files.config import get_config, update_config
 from covalent._shared_files.util_classes import DispatchInfo
 from covalent._workflow.transport import TransportableObject
-from covalent.executor import BaseExecutor
+from covalent.executor import BaseAsyncExecutor
 
 # The plugin class name must be given by the EXECUTOR_PLUGIN_NAME attribute:
 executor_plugin_name = "SSHExecutor"
@@ -61,9 +61,9 @@ _EXECUTOR_PLUGIN_DEFAULTS = {
 }
 
 
-class SSHExecutor(BaseExecutor):
+class SSHExecutor(BaseAsyncExecutor):
     """
-    Executor class that invokes the input function on a remote server.
+    Async executor class that invokes the input function on a remote server.
 
     Args:
         username: Username used to authenticate over SSH.
