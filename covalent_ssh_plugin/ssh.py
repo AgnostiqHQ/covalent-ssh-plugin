@@ -28,7 +28,7 @@ import os
 import socket
 from contextlib import redirect_stderr, redirect_stdout
 from multiprocessing import Queue as MPQ
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable, List, Tuple, Union
 
 # Executor-specific imports:
 import cloudpickle as pickle
@@ -41,7 +41,7 @@ from covalent._shared_files import logger
 from covalent._shared_files.config import get_config, update_config
 from covalent._shared_files.util_classes import DispatchInfo
 from covalent._workflow.transport import TransportableObject
-from covalent.executor import BaseExecutor
+from covalent.executor import BaseExecutor, wrapper_fn
 
 # The plugin class name must be given by the EXECUTOR_PLUGIN_NAME attribute:
 executor_plugin_name = "SSHExecutor"
@@ -121,6 +121,8 @@ class SSHExecutor(BaseExecutor):
         function: TransportableObject,
         args: list,
         kwargs: dict,
+        call_before: List,
+        call_after: List,
         dispatch_id: str,
         results_dir: str,
         node_id: int = -1,
@@ -148,7 +150,10 @@ class SSHExecutor(BaseExecutor):
         operation_id = f"{dispatch_id}_{node_id}"
 
         dispatch_info = DispatchInfo(dispatch_id)
-        fn = function.get_deserialized()
+
+        new_args = [function, call_before, call_after]
+        for arg in args:
+            new_args.append(arg)
 
         exception = None
 
@@ -164,7 +169,7 @@ class SSHExecutor(BaseExecutor):
 
             if not ssh_success:
                 message = f"Could not connect to host '{self.hostname}' as user '{self.username}'"
-                output, stdout, stderr, exception = self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
+                output, stdout, stderr, exception = self._on_ssh_fail(wrapper_fn, new_args, kwargs, stdout, stderr, message)
                 if exception:
                     raise exception
                 return (output, stdout, stderr)
@@ -179,7 +184,7 @@ class SSHExecutor(BaseExecutor):
 
                 if self.python3_path == "":
                     message = f"No Python 3 installation found on host machine {self.hostname}"
-                    output, stdout, stderr, exception = self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
+                    output, stdout, stderr, exception = self._on_ssh_fail(wrapper_fn, new_args, kwargs, stdout, stderr, message)
                     if exception:
                         raise exception
                     return (output, stdout, stderr)
@@ -191,7 +196,7 @@ class SSHExecutor(BaseExecutor):
                 app_log.warning(err)
 
             # Pickle and save location of the function and its arguments:
-            self._write_function_files(operation_id, fn, args, kwargs)
+            self._write_function_files(operation_id, wrapper_fn, new_args, kwargs)
 
             # scp pickled function and run script to server here:
             scp = SCPClient(self.client.get_transport())
@@ -210,7 +215,7 @@ class SSHExecutor(BaseExecutor):
             client_in, client_out, client_err = self.client.exec_command(cmd)
             if client_out.read().decode("utf8").strip() != self.remote_result_file:
                 message = f"Result file {self.remote_result_file} on remote host {self.hostname} was not found"
-                output, stdout, stderr, exception = self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
+                output, stdout, stderr, exception = self._on_ssh_fail(wrapper_fn, new_args, kwargs, stdout, stderr, message)
                 if exception:
                     raise exception
                 return (output, stdout, stderr)
