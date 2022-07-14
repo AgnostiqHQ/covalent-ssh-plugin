@@ -27,10 +27,9 @@ import pytest
 
 import pytest
 
-import covalent as ct
-from covalent._workflow.transport import TransportableObject
 from covalent.executor import SSHExecutor
 from covalent._shared_files.config import get_config, update_config
+import asyncio
 
 def test_init():
     """Test that initialization properly sets member variables."""
@@ -80,29 +79,31 @@ def test_on_ssh_fail():
     def simple_task(x):
         return x ** 2
 
-    transport_function = TransportableObject(simple_task)
-
-    result, _, _ = executor.execute(
-        function = transport_function,
-        args = [5],
-        kwargs = {},
-        info_queue = MPQ(),
-        node_id = 0,
-        dispatch_id = 0,
-        results_dir = "./",
-    )
-    assert result == 25
-
-    executor.run_local_on_ssh_fail = False
-    with pytest.raises(RuntimeError):
-        result, _, _  = executor.execute(
-            function = transport_function,
+    result, _, _ = asyncio.run(
+        executor.execute(
+            function = simple_task,
             args = [5],
             kwargs = {},
             info_queue = MPQ(),
             node_id = 0,
             dispatch_id = 0,
             results_dir = "./",
+        )
+    )
+    assert result == 25
+
+    executor.run_local_on_ssh_fail = False
+    with pytest.raises(RuntimeError):
+        result, _, _  = asyncio.run(
+            executor.execute(
+                function = simple_task,
+                args = [5],
+                kwargs = {},
+                info_queue = MPQ(),
+                node_id = 0,
+                dispatch_id = 0,
+                results_dir = "./",
+            )
         )
 
 def test_client_connect(mocker):
@@ -114,18 +115,18 @@ def test_client_connect(mocker):
         ssh_key_file = "non-existant_key",
     )
 
-    connected = executor._client_connect()
+    connected, _ = asyncio.run(executor._client_connect())
     assert connected is False
 
     # Patch to fake existence of valid SSH keyfile. Connection should still fail due to
     # the invalide username/hostname.
     mocker.patch("os.path.exists", return_value = True)
-    connected = executor._client_connect()
+    connected, _ = asyncio.run(executor._client_connect())
     assert connected is False
 
     # Patch to make call to paramiko.SSHClient.connect not fail with incorrect user/host/keyfile.
     mocker.patch("paramiko.SSHClient.connect", return_value = None)
-    connected = executor._client_connect()
+    connected, _ = asyncio.run(executor._client_connect())
     assert connected is True
 
 def test_deserialization(mocker):
@@ -139,25 +140,18 @@ def test_deserialization(mocker):
     def simple_task(x):
         return x
 
-    transport_function = TransportableObject(simple_task)
-    deserizlized_mock = mocker.patch.object(
-        transport_function,
-        "get_deserialized",
-        return_value = simple_task,
-    )
-
     with pytest.raises(RuntimeError):
-        executor.execute(
-            function = transport_function,
-            args = [5],
-            kwargs = {},
-            info_queue = MPQ(),
-            node_id = 0,
-            dispatch_id = 0,
-            results_dir = "./",
+        asyncio.run(
+            executor.execute(
+                function = simple_task,
+                args = [5],
+                kwargs = {},
+                info_queue = MPQ(),
+                node_id = 0,
+                dispatch_id = 0,
+                results_dir = "./",
+            )
         )
-
-    deserizlized_mock.assert_called_once()
 
 
 def test_file_writes():

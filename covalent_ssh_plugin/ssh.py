@@ -381,6 +381,7 @@ class SSHExecutor(BaseAsyncExecutor):
 
 
         ssh_success = False
+        conn = None
         if os.path.exists(self.ssh_key_file):
             try:
                 conn = await asyncssh.connect(self.hostname,
@@ -390,7 +391,6 @@ class SSHExecutor(BaseAsyncExecutor):
 
                 ssh_success = True
             except (socket.gaierror, ValueError, TimeoutError) as e:
-                conn = None
                 app_log.error(e)
 
 
