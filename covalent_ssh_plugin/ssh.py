@@ -117,7 +117,7 @@ class SSHExecutor(BaseAsyncExecutor):
 
     async def execute(
         self,
-        function: TransportableObject,
+        function: Callable,
         args: list,
         kwargs: dict,
         dispatch_id: str,
@@ -147,7 +147,6 @@ class SSHExecutor(BaseAsyncExecutor):
         operation_id = f"{dispatch_id}_{node_id}"
 
         dispatch_info = DispatchInfo(dispatch_id)
-        fn = function.get_deserialized()
 
         exception = None
 
@@ -159,15 +158,12 @@ class SSHExecutor(BaseAsyncExecutor):
 
 
         with self.get_dispatch_context(dispatch_info), redirect_stdout(
-            io.StringIO()
-        ) as stdout, redirect_stderr(io.StringIO()) as stderr:
+                io.StringIO()
+            ) as stdout, redirect_stderr(io.StringIO()) as stderr:
 
             if not ssh_success:
                 message = f"Could not connect to host '{self.hostname}' as user '{self.username}'"
-                output, stdout, stderr, exception = self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
-                if exception:
-                    raise exception
-                return (output, stdout, stderr)
+                return self._on_ssh_fail(function, args, kwargs, stdout, stderr, message)
 
             message = f"Executing node {node_id} on host {self.hostname}."
             app_log.debug(message)
@@ -181,12 +177,9 @@ class SSHExecutor(BaseAsyncExecutor):
                 # self.python3_path = client_out.read().decode("utf8").strip()
                 self.python3_path = client_out.strip()
 
-                if self.python3_path == "":
-                    message = f"No Python 3 installation found on host machine {self.hostname}"
-                    output, stdout, stderr, exception = self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
-                    if exception:
-                        raise exception
-                    return (output, stdout, stderr)
+            if self.python3_path == "":
+                message = f"No Python 3 installation found on host machine {self.hostname}"
+                return self._on_ssh_fail(function, args, kwargs, stdout, stderr, message)
 
             cmd = f"mkdir -p {self.remote_cache_dir}"
 
@@ -199,7 +192,7 @@ class SSHExecutor(BaseAsyncExecutor):
                 app_log.warning(err)
 
             # Pickle and save location of the function and its arguments:
-            function_file, script_file, remote_function_file, remote_script_file, remote_result_file = self._write_function_files(operation_id, fn, args, kwargs)
+            function_file, script_file, remote_function_file, remote_script_file, remote_result_file = self._write_function_files(operation_id, function, args, kwargs)
 
             await asyncssh.scp(function_file, (conn, remote_function_file))
             await asyncssh.scp(script_file, (conn, remote_script_file))
@@ -217,10 +210,7 @@ class SSHExecutor(BaseAsyncExecutor):
             client_out = result.stdout
             if client_out.strip() != remote_result_file:
                 message = f"Result file {remote_result_file} on remote host {self.hostname} was not found"
-                output, stdout, stderr, exception = self._on_ssh_fail(fn, args, kwargs, stdout, stderr, message)
-                if exception:
-                    raise exception
-                return (output, stdout, stderr)
+                return self._on_ssh_fail(function, args, kwargs, stdout, stderr, message)
 
             # scp the pickled result to the local machine here:
             result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
@@ -367,17 +357,16 @@ class SSHExecutor(BaseAsyncExecutor):
             app_log.warning(message)
 
             result = None
-            exception = None
 
             try:
                 result = fn(*args, **kwargs)
             except Exception as e:
-                exception = e
+                raise e
 
-            return (result, stdout.getvalue(), stderr.getvalue(), exception)
+            return (result, stdout.getvalue(), stderr.getvalue())
         else:
             app_log.error(message)
-            return (None, "", "", RuntimeError)
+            raise RuntimeError
 
     async def _client_connect(self) -> bool:
         """
