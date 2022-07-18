@@ -22,7 +22,7 @@
 
 from multiprocessing import Queue as MPQ
 import os
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, AsyncMock
 import pytest
 
 import pytest
@@ -120,12 +120,13 @@ def test_client_connect(mocker):
 
     # Patch to fake existence of valid SSH keyfile. Connection should still fail due to
     # the invalide username/hostname.
-    mocker.patch("os.path.exists", return_value = True)
+    mocker.patch("builtins.open", mock_open(read_data="data"))
     connected, _ = asyncio.run(executor._client_connect())
     assert connected is False
 
     # Patch to make call to paramiko.SSHClient.connect not fail with incorrect user/host/keyfile.
-    mocker.patch("paramiko.SSHClient.connect", return_value = None)
+    mocker.patch("os.path.exists", return_value = True)
+    mocker.patch("asyncssh.connect", AsyncMock())
     connected, _ = asyncio.run(executor._client_connect())
     assert connected is True
 
@@ -169,29 +170,29 @@ def test_file_writes():
 
     @patch("builtins.open", new_callable=mock_open())
     def write_files(mock):
-        executor._write_function_files(
+        return executor._write_function_files(
             operation_id,
             simple_task,
             [5],
             {},
         )
 
-    write_files()
+    function_file, script_file, remote_function_file, remote_script_file, remote_result_file = write_files()
 
-    assert executor.script_file == os.path.join(executor.cache_dir, f"exec_{operation_id}.py")
-    assert executor.remote_script_file == os.path.join(
+    assert script_file == os.path.join(executor.cache_dir, f"exec_{operation_id}.py")
+    assert remote_script_file == os.path.join(
         executor.remote_cache_dir,
         f"exec_{operation_id}.py"
     )
-    assert executor.function_file == os.path.join(
+    assert function_file == os.path.join(
         executor.cache_dir,
         f"function_{operation_id}.pkl"
     )
-    assert executor.remote_function_file == os.path.join(
+    assert remote_function_file == os.path.join(
         executor.remote_cache_dir,
         f"function_{operation_id}.pkl"
     )
-    assert executor.remote_result_file == os.path.join(
+    assert remote_result_file == os.path.join(
         executor.remote_cache_dir,
         f"result_{operation_id}.pkl"
     )
