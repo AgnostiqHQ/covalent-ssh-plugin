@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+### Changed
+
+- Switched to asynchronous SSH connections making the executor async-aware.
+- Tests have been updated to reflect the switch to async ssh connections.
+
 ## [0.3.0] - 2022-05-26
 
 ### Changed

@@ -1,2 +1,2 @@
-paramiko>=2.9.2
-scp>=0.14.4
+asyncssh>=2.10.1
+
