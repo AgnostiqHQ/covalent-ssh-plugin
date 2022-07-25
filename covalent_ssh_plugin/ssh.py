@@ -23,14 +23,14 @@ Executor plugin for executing the function on a remote machine through SSH.
 """
 
 # Required for all executor plugins
-import io
 import os
 import socket
 from contextlib import redirect_stderr, redirect_stdout
 from multiprocessing import Queue as MPQ
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable, Tuple, Union, Coroutine, List, Dict
 
 # Executor-specific imports:
+import sys
 import asyncssh
 import cloudpickle as pickle
 
@@ -40,7 +40,7 @@ from covalent._shared_files import logger
 from covalent._shared_files.config import get_config, update_config
 from covalent._shared_files.util_classes import DispatchInfo
 from covalent._workflow.transport import TransportableObject
-from covalent.executor.base_async import BaseAsyncExecutor
+from covalent.executor.base import BaseAsyncExecutor
 
 # The plugin class name must be given by the EXECUTOR_PLUGIN_NAME attribute:
 executor_plugin_name = "SSHExecutor"
@@ -115,126 +115,29 @@ class SSHExecutor(BaseAsyncExecutor):
 
         super().__init__(**base_kwargs)
 
-    async def execute(
-        self,
-        function: Callable,
-        args: list,
-        kwargs: dict,
-        dispatch_id: str,
-        results_dir: str,
-        node_id: int = -1,
-        info_queue: MPQ = None,
-    ) -> Any:
+    async def execute(self, function: Callable, args: List, kwargs: Dict, dispatch_id: str, results_dir: str, node_id: int = -1) -> Any:
         """
-        Executes the input function and returns the result.
+        Set the local variables if needed and execute the `run()` function. This also takes care
+        of redirecting the stdout and stderr to their respective locations.
 
         Args:
-            function: The input python function which will be executed and whose result
-                is ultimately returned by this function.
-            args: List of positional arguments to be used by the function.
-            kwargs: Dictionary of keyword arguments to be used by the function.
-            info_queue: A multiprocessing Queue object used for shared variables across
-                processes. Information about, eg, status, can be stored here.
-            node_id: The ID of this task in the bigger workflow graph.
-            dispatch_id: The unique identifier of the external lattice process which is
-                calling this function.
-            results_dir: The location of the results directory.
-
+            function: Function to be sent to `run`.
+            args: Postional arguments of above function.
+            kwargs: Keyword arguments of above function.
+            dispatch_id: Dispatch ID of this workflow.
+            results_dir: Results directory for this workflow.
+            node_id: Node ID of this electron/node.
+        
         Returns:
-            output: The result of the executed function.
+            An awaitable coroutine which once awaited will return a tuple containing:
+                result: Result of the function execution.
+                stdout: Any print statements to stdout.
+                stderr: Any prints to stderr.
         """
 
-        operation_id = f"{dispatch_id}_{node_id}"
-
-        dispatch_info = DispatchInfo(dispatch_id)
-
-        exception = None
-
-        if info_queue:
-            info_dict = {"STATUS": Result.RUNNING}
-            info_queue.put_nowait(info_dict)
-
-        ssh_success, conn = await self._client_connect()
-
-
-        with self.get_dispatch_context(dispatch_info), redirect_stdout(
-                io.StringIO()
-            ) as stdout, redirect_stderr(io.StringIO()) as stderr:
-
-            if not ssh_success:
-                message = f"Could not connect to host '{self.hostname}' as user '{self.username}'"
-                return self._on_ssh_fail(function, args, kwargs, stdout, stderr, message)
-
-            message = f"Executing node {node_id} on host {self.hostname}."
-            app_log.debug(message)
-
-            if self.python3_path == "":
-                cmd = "which python3"
-                # client_in, client_out, client_err = self.client.exec_command(cmd)
-                result = await conn.run(cmd)
-                client_out = result.stdout
-                client_err = result.stderr
-                # self.python3_path = client_out.read().decode("utf8").strip()
-                self.python3_path = client_out.strip()
-
-            if self.python3_path == "":
-                message = f"No Python 3 installation found on host machine {self.hostname}"
-                return self._on_ssh_fail(function, args, kwargs, stdout, stderr, message)
-
-            cmd = f"mkdir -p {self.remote_cache_dir}"
-
-            result = await conn.run(cmd)
-            client_out = result.stdout
-            client_err = result.stderr
-
-            err = client_err
-            if err != "":
-                app_log.warning(err)
-
-            # Pickle and save location of the function and its arguments:
-            function_file, script_file, remote_function_file, remote_script_file, remote_result_file = self._write_function_files(operation_id, function, args, kwargs)
-
-            await asyncssh.scp(function_file, (conn, remote_function_file))
-            await asyncssh.scp(script_file, (conn, remote_script_file))
-
-            # Run the function:
-            cmd = f"{self.python3_path} {remote_script_file}"
-            result = await conn.run(cmd)
-            err = result.stderr.strip()
-            if err != "":
-                app_log.warning(err)
-
-            # Check that a result file was produced:
-            cmd = f"ls {remote_result_file}"
-            result = await conn.run(cmd)
-            client_out = result.stdout
-            if client_out.strip() != remote_result_file:
-                message = f"Result file {remote_result_file} on remote host {self.hostname} was not found"
-                return self._on_ssh_fail(function, args, kwargs, stdout, stderr, message)
-
-            # scp the pickled result to the local machine here:
-            result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
-            await asyncssh.scp((conn, remote_result_file), result_file)
-
-            # Load the result file:
-            with open(result_file, "rb") as f_in:
-                result, exception = pickle.load(f_in)
-
-            if exception is not None:
-                app_log.debug(f"exception: {exception}")
-                raise exception
-
-        conn.close()
-
-        if info_queue:
-            # Update the status:
-            info_dict = info_queue.get()
-            info_dict["STATUS"] = Result.FAILED if result is None else Result.COMPLETED
-            info_queue.put(info_dict)
-
-        # TODO: fix execution._run_task() to parse exception as in covalent-microservices
-        # return (result, stdout.getvalue(), stderr.getvalue(), exception)
-        return (result, stdout.getvalue(), stderr.getvalue())
+        self.dispatch_id = dispatch_id
+        self.node_id = node_id
+        return await super().execute(function, args, kwargs, dispatch_id, results_dir, node_id)
 
     def _write_function_files(
         self,
@@ -332,8 +235,6 @@ class SSHExecutor(BaseAsyncExecutor):
         fn: Callable,
         args: list,
         kwargs: dict,
-        stdout: io.StringIO,
-        stderr: io.StringIO,
         message: str,
     ) -> Union[Tuple[Any, str, str], None]:
         """
@@ -342,15 +243,12 @@ class SSHExecutor(BaseAsyncExecutor):
         Args:
             fn: The function to be executed.
             kwargs: The input arguments to the function.
-            stdout: an i/o object used for logging statements.
-            stderr: an i/o object used for logging errors.
             message: The warning/error message to be displayed.
 
         Returns:
-            Either a tuple consisting of
-                a) the function result, stdout, stderr and Python exception (if any), if
-                    self.run_local_on_ssh_fail == True, or
-                b) (None, "", "", RuntimeError) if self.run_local_on_ssh_fail == False.
+            Either:
+                a) the function result if self.run_local_on_ssh_fail == True, or
+                b) None and raise RuntimeError if self.run_local_on_ssh_fail == False.
         """
 
         if self.run_local_on_ssh_fail:
@@ -363,9 +261,10 @@ class SSHExecutor(BaseAsyncExecutor):
             except Exception as e:
                 raise e
 
-            return (result, stdout.getvalue(), stderr.getvalue())
+            return result
         else:
             app_log.error(message)
+            print(f"{message}", file=sys.stderr)
             raise RuntimeError
 
     async def _client_connect(self) -> bool:
@@ -414,3 +313,90 @@ class SSHExecutor(BaseAsyncExecutor):
         """
 
         return info_dict.get("STATUS", Result.NEW_OBJ)
+
+    async def run(self, function: Callable, args: list, kwargs: dict) -> Coroutine:
+        """
+        Run the executable on remote machine and return the result.
+
+        Args:
+            function: Function to be run on the remote machine.
+            args: Positional arguments to be passed to the function.
+            kwargs: Keyword argument to be passed to the function.
+        
+        Returns:
+            An awaitable coroutine which once awaited will return the result
+            of the executed function.
+        """
+
+        operation_id = f"{self.dispatch_id}_{self.node_id}"
+
+        exception = None
+
+        ssh_success, conn = await self._client_connect()
+
+        if not ssh_success:
+            message = f"Could not connect to host '{self.hostname}' as user '{self.username}'"
+            return self._on_ssh_fail(function, args, kwargs, message)
+
+        message = f"Executing node {self.node_id} on host {self.hostname}."
+        app_log.debug(message)
+
+        if self.python3_path == "":
+            cmd = "which python3"
+            # client_in, client_out, client_err = self.client.exec_command(cmd)
+            result = await conn.run(cmd)
+            client_out = result.stdout
+            client_err = result.stderr
+            # self.python3_path = client_out.read().decode("utf8").strip()
+            self.python3_path = client_out.strip()
+
+        if self.python3_path == "":
+            message = f"No Python 3 installation found on host machine {self.hostname}"
+            return self._on_ssh_fail(function, args, kwargs, message)
+
+        cmd = f"mkdir -p {self.remote_cache_dir}"
+
+        result = await conn.run(cmd)
+        client_out = result.stdout
+        client_err = result.stderr
+
+        err = client_err
+        if err != "":
+            app_log.warning(err)
+
+        # Pickle and save location of the function and its arguments:
+        function_file, script_file, remote_function_file, remote_script_file, remote_result_file = self._write_function_files(operation_id, function, args, kwargs)
+
+        await asyncssh.scp(function_file, (conn, remote_function_file))
+        await asyncssh.scp(script_file, (conn, remote_script_file))
+
+        # Run the function:
+        cmd = f"{self.python3_path} {remote_script_file}"
+        result = await conn.run(cmd)
+        err = result.stderr.strip()
+        if err != "":
+            app_log.warning(err)
+
+        # Check that a result file was produced:
+        cmd = f"ls {remote_result_file}"
+        result = await conn.run(cmd)
+        client_out = result.stdout
+        if client_out.strip() != remote_result_file:
+            message = f"Result file {remote_result_file} on remote host {self.hostname} was not found"
+            return self._on_ssh_fail(function, args, kwargs, message)
+
+        # scp the pickled result to the local machine here:
+        result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
+        await asyncssh.scp((conn, remote_result_file), result_file)
+
+        # Load the result file:
+        with open(result_file, "rb") as f_in:
+            result, exception = pickle.load(f_in)
+
+        if exception is not None:
+            app_log.debug(f"exception: {exception}")
+            raise exception
+
+        await conn.wait_closed()
+        return result
+

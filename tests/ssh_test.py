@@ -25,8 +25,6 @@ import os
 from unittest.mock import patch, mock_open, AsyncMock
 import pytest
 
-import pytest
-
 from covalent.executor import SSHExecutor
 from covalent._shared_files.config import get_config, update_config
 import asyncio
@@ -67,7 +65,8 @@ def test_update_params():
     assert params["ssh_key_file"] == executor.ssh_key_file
     assert params["python3_path"] == executor.python3_path
 
-def test_on_ssh_fail():
+@pytest.mark.asyncio
+async def test_on_ssh_fail():
     """Test that the process runs locally upon connection errors."""
     
     executor = SSHExecutor(
@@ -79,8 +78,7 @@ def test_on_ssh_fail():
     def simple_task(x):
         return x ** 2
 
-    result, _, _ = asyncio.run(
-        executor.execute(
+    result, _, _ = await executor.execute(
             function = simple_task,
             args = [5],
             kwargs = {},
@@ -88,14 +86,12 @@ def test_on_ssh_fail():
             node_id = 0,
             dispatch_id = 0,
             results_dir = "./",
-        )
     )
     assert result == 25
 
     executor.run_local_on_ssh_fail = False
     with pytest.raises(RuntimeError):
-        result, _, _  = asyncio.run(
-            executor.execute(
+        result, _, _  = await executor.execute(
                 function = simple_task,
                 args = [5],
                 kwargs = {},
@@ -104,9 +100,9 @@ def test_on_ssh_fail():
                 dispatch_id = 0,
                 results_dir = "./",
             )
-        )
 
-def test_client_connect(mocker):
+@pytest.mark.asyncio
+async def test_client_connect(mocker):
     """Test that connection will fail if credentials are not supplied."""
     
     executor = SSHExecutor(
@@ -115,22 +111,23 @@ def test_client_connect(mocker):
         ssh_key_file = "non-existant_key",
     )
 
-    connected, _ = asyncio.run(executor._client_connect())
+    connected, _ = await executor._client_connect()
     assert connected is False
 
     # Patch to fake existence of valid SSH keyfile. Connection should still fail due to
     # the invalide username/hostname.
     mocker.patch("builtins.open", mock_open(read_data="data"))
-    connected, _ = asyncio.run(executor._client_connect())
+    connected, _ = await executor._client_connect()
     assert connected is False
 
     # Patch to make call to paramiko.SSHClient.connect not fail with incorrect user/host/keyfile.
     mocker.patch("os.path.exists", return_value = True)
     mocker.patch("asyncssh.connect", AsyncMock())
-    connected, _ = asyncio.run(executor._client_connect())
+    connected, _ = await executor._client_connect()
     assert connected is True
 
-def test_deserialization(mocker):
+@pytest.mark.asyncio
+async def test_deserialization(mocker):
     """Test that the input function is deserialized."""
 
     executor = SSHExecutor(
@@ -142,8 +139,7 @@ def test_deserialization(mocker):
         return x
 
     with pytest.raises(RuntimeError):
-        asyncio.run(
-            executor.execute(
+        await executor.execute(
                 function = simple_task,
                 args = [5],
                 kwargs = {},
@@ -152,7 +148,6 @@ def test_deserialization(mocker):
                 dispatch_id = 0,
                 results_dir = "./",
             )
-        )
 
 
 def test_file_writes():
