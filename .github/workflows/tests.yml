@@ -66,7 +66,7 @@ jobs:
           pip install --no-cache-dir -r ./tests/requirements.txt
 
       - name: Install Covalent
-        run: pip install git+https://github.com/AgnostiqHQ/covalent.git@develop
+        run: pip install covalent --pre
 
       - name: Build SSH plugin
         run: python setup.py sdist
