@@ -78,27 +78,21 @@ async def test_on_ssh_fail():
     def simple_task(x):
         return x ** 2
 
-    result, _, _ = await executor.execute(
+    executor.node_id = 0,
+    executor.dispatch_id = 0,
+    result = await executor.run(
             function = simple_task,
             args = [5],
             kwargs = {},
-            info_queue = MPQ(),
-            node_id = 0,
-            dispatch_id = 0,
-            results_dir = "./",
     )
     assert result == 25
 
     executor.run_local_on_ssh_fail = False
     with pytest.raises(RuntimeError):
-        result, _, _  = await executor.execute(
+        result = await executor.run(
                 function = simple_task,
                 args = [5],
                 kwargs = {},
-                info_queue = MPQ(),
-                node_id = 0,
-                dispatch_id = 0,
-                results_dir = "./",
             )
 
 @pytest.mark.asyncio
@@ -138,15 +132,14 @@ async def test_deserialization(mocker):
     def simple_task(x):
         return x
 
+    executor.node_id = 0,
+    executor.dispatch_id = 0,
+
     with pytest.raises(RuntimeError):
-        await executor.execute(
+        await executor.run(
                 function = simple_task,
                 args = [5],
                 kwargs = {},
-                info_queue = MPQ(),
-                node_id = 0,
-                dispatch_id = 0,
-                results_dir = "./",
             )
 
 
