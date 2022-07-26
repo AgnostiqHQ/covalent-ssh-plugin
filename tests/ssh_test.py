@@ -20,14 +20,13 @@
 
 """Tests for the SSH executor plugin."""
 
-from multiprocessing import Queue as MPQ
+
 import os
 from unittest.mock import patch, mock_open, AsyncMock
 import pytest
 
 from covalent.executor import SSHExecutor
-from covalent._shared_files.config import get_config, update_config
-import asyncio
+from covalent._shared_files.config import get_config
 
 def test_init():
     """Test that initialization properly sets member variables."""

@@ -25,8 +25,6 @@ Executor plugin for executing the function on a remote machine through SSH.
 # Required for all executor plugins
 import os
 import socket
-from contextlib import redirect_stderr, redirect_stdout
-from multiprocessing import Queue as MPQ
 from typing import Any, Callable, Tuple, Union, Coroutine, List, Dict
 
 # Executor-specific imports:
@@ -37,9 +35,7 @@ import cloudpickle as pickle
 # Covalent imports
 from covalent._results_manager.result import Result
 from covalent._shared_files import logger
-from covalent._shared_files.config import get_config, update_config
-from covalent._shared_files.util_classes import DispatchInfo
-from covalent._workflow.transport import TransportableObject
+from covalent._shared_files.config import update_config
 from covalent.executor.base import BaseAsyncExecutor
 
 # The plugin class name must be given by the EXECUTOR_PLUGIN_NAME attribute:
