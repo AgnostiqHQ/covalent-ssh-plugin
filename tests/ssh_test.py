@@ -83,6 +83,7 @@ async def test_on_ssh_fail():
             function = simple_task,
             args = [5],
             kwargs = {},
+            task_metadata = {"dispatch_id": -1, "node_id": -1},
     )
     assert result == 25
 
@@ -92,6 +93,7 @@ async def test_on_ssh_fail():
                 function = simple_task,
                 args = [5],
                 kwargs = {},
+                task_metadata = {"dispatch_id": -1, "node_id": -1},
             )
 
 @pytest.mark.asyncio
@@ -118,28 +120,6 @@ async def test_client_connect(mocker):
     mocker.patch("asyncssh.connect", AsyncMock())
     connected, _ = await executor._client_connect()
     assert connected is True
-
-@pytest.mark.asyncio
-async def test_deserialization(mocker):
-    """Test that the input function is deserialized."""
-
-    executor = SSHExecutor(
-        username = "user",
-        hostname = "host",
-    )
-
-    def simple_task(x):
-        return x
-
-    executor.node_id = 0,
-    executor.dispatch_id = 0,
-
-    with pytest.raises(RuntimeError):
-        await executor.run(
-                function = simple_task,
-                args = [5],
-                kwargs = {},
-            )
 
 
 def test_file_writes():
