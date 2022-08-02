@@ -111,30 +111,6 @@ class SSHExecutor(BaseAsyncExecutor):
 
         super().__init__(**base_kwargs)
 
-    async def execute(self, function: Callable, args: List, kwargs: Dict, dispatch_id: str, results_dir: str, node_id: int = -1) -> Any:
-        """
-        Set the local variables if needed and execute the `run()` function. This also takes care
-        of redirecting the stdout and stderr to their respective locations.
-
-        Args:
-            function: Function to be sent to `run`.
-            args: Postional arguments of above function.
-            kwargs: Keyword arguments of above function.
-            dispatch_id: Dispatch ID of this workflow.
-            results_dir: Results directory for this workflow.
-            node_id: Node ID of this electron/node.
-        
-        Returns:
-            An awaitable coroutine which once awaited will return a tuple containing:
-                result: Result of the function execution.
-                stdout: Any print statements to stdout.
-                stderr: Any prints to stderr.
-        """
-
-        self.dispatch_id = dispatch_id
-        self.node_id = node_id
-        return await super().execute(function, args, kwargs, dispatch_id, results_dir, node_id)
-
     def _write_function_files(
         self,
         operation_id: str,
@@ -310,7 +286,7 @@ class SSHExecutor(BaseAsyncExecutor):
 
         return info_dict.get("STATUS", Result.NEW_OBJ)
 
-    async def run(self, function: Callable, args: list, kwargs: dict) -> Coroutine:
+    async def run(self, function: Callable, args: list, kwargs: dict, task_metadata: Dict) -> Coroutine:
         """
         Run the executable on remote machine and return the result.
 
@@ -318,13 +294,15 @@ class SSHExecutor(BaseAsyncExecutor):
             function: Function to be run on the remote machine.
             args: Positional arguments to be passed to the function.
             kwargs: Keyword argument to be passed to the function.
-        
+
         Returns:
             An awaitable coroutine which once awaited will return the result
             of the executed function.
         """
 
-        operation_id = f"{self.dispatch_id}_{self.node_id}"
+        dispatch_id = task_metadata["dispatch_id"]
+        node_id = task_metadata["node_id"]
+        operation_id = f"{dispatch_id}_{node_id}"
 
         exception = None
 
@@ -334,7 +312,7 @@ class SSHExecutor(BaseAsyncExecutor):
             message = f"Could not connect to host '{self.hostname}' as user '{self.username}'"
             return self._on_ssh_fail(function, args, kwargs, message)
 
-        message = f"Executing node {self.node_id} on host {self.hostname}."
+        message = f"Executing node {node_id} on host {self.hostname}."
         app_log.debug(message)
 
         if self.python3_path == "":
