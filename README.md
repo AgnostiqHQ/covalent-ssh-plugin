@@ -2,9 +2,7 @@
 
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/AgnostiqHQ/covalent/master/doc/source/_static/covalent_readme_banner.svg" width=150%>
-
-&nbsp;
+<img src="https://raw.githubusercontent.com/AgnostiqHQ/covalent-ssh-plugin/main/assets/ssh_readme_banner.svg" width=150%>
 
 </div>
 

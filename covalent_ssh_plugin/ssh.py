@@ -22,23 +22,18 @@
 Executor plugin for executing the function on a remote machine through SSH.
 """
 
-# Required for all executor plugins
 import os
 import socket
-from typing import Any, Callable, Tuple, Union, Coroutine, List, Dict
-
-# Executor-specific imports:
 import sys
+from typing import Any, Callable, Coroutine, Dict, List, Tuple, Union
+
 import asyncssh
 import cloudpickle as pickle
-
-# Covalent imports
 from covalent._results_manager.result import Result
 from covalent._shared_files import logger
 from covalent._shared_files.config import update_config
 from covalent.executor.base import BaseAsyncExecutor
 
-# The plugin class name must be given by the EXECUTOR_PLUGIN_NAME attribute:
 executor_plugin_name = "SSHExecutor"
 
 app_log = logger.app_log
@@ -135,9 +130,7 @@ class SSHExecutor(BaseAsyncExecutor):
 
         with open(function_file, "wb") as f_out:
             pickle.dump((fn, args, kwargs), f_out)
-        remote_function_file = os.path.join(
-            self.remote_cache_dir, f"function_{operation_id}.pkl"
-        )
+        remote_function_file = os.path.join(self.remote_cache_dir, f"function_{operation_id}.pkl")
 
         # Write the code that the remote server will use to execute the function.
 
@@ -178,7 +171,13 @@ class SSHExecutor(BaseAsyncExecutor):
         with open(script_file, "w") as f_out:
             f_out.write(exec_script)
 
-        return function_file, script_file, remote_function_file, remote_script_file, remote_result_file
+        return (
+            function_file,
+            script_file,
+            remote_function_file,
+            remote_script_file,
+            remote_result_file,
+        )
 
     def _update_params(self) -> None:
         """
@@ -250,20 +249,20 @@ class SSHExecutor(BaseAsyncExecutor):
             True if connection to the remote host was successful, False otherwise.
         """
 
-
         ssh_success = False
         conn = None
         if os.path.exists(self.ssh_key_file):
             try:
-                conn = await asyncssh.connect(self.hostname,
-                                                   username=self.username,
-                                                   client_keys=[self.ssh_key_file],
-                                                   known_hosts=None)
+                conn = await asyncssh.connect(
+                    self.hostname,
+                    username=self.username,
+                    client_keys=[self.ssh_key_file],
+                    known_hosts=None,
+                )
 
                 ssh_success = True
             except (socket.gaierror, ValueError, TimeoutError) as e:
                 app_log.error(e)
-
 
         else:
             message = "no SSH key file found. Cannot connect to host."
@@ -286,7 +285,9 @@ class SSHExecutor(BaseAsyncExecutor):
 
         return info_dict.get("STATUS", Result.NEW_OBJ)
 
-    async def run(self, function: Callable, args: list, kwargs: dict, task_metadata: Dict) -> Coroutine:
+    async def run(
+        self, function: Callable, args: list, kwargs: dict, task_metadata: Dict
+    ) -> Coroutine:
         """
         Run the executable on remote machine and return the result.
 
@@ -339,7 +340,13 @@ class SSHExecutor(BaseAsyncExecutor):
             app_log.warning(err)
 
         # Pickle and save location of the function and its arguments:
-        function_file, script_file, remote_function_file, remote_script_file, remote_result_file = self._write_function_files(operation_id, function, args, kwargs)
+        (
+            function_file,
+            script_file,
+            remote_function_file,
+            remote_script_file,
+            remote_result_file,
+        ) = self._write_function_files(operation_id, function, args, kwargs)
 
         await asyncssh.scp(function_file, (conn, remote_function_file))
         await asyncssh.scp(script_file, (conn, remote_script_file))
@@ -356,7 +363,9 @@ class SSHExecutor(BaseAsyncExecutor):
         result = await conn.run(cmd)
         client_out = result.stdout
         if client_out.strip() != remote_result_file:
-            message = f"Result file {remote_result_file} on remote host {self.hostname} was not found"
+            message = (
+                f"Result file {remote_result_file} on remote host {self.hostname} was not found"
+            )
             return self._on_ssh_fail(function, args, kwargs, message)
 
         # scp the pickled result to the local machine here:
@@ -373,4 +382,3 @@ class SSHExecutor(BaseAsyncExecutor):
 
         await conn.wait_closed()
         return result
-
