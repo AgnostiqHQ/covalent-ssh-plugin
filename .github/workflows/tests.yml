@@ -103,6 +103,7 @@ jobs:
           semver_only: true
         
       - name: Push to main
+        id: push
         if: github.ref == 'refs/heads/develop' && matrix.os == 'ubuntu-latest' && matrix.container == 'python:3.8-buster'
         run: |
           MASTER_VERSION="$(echo ${{ steps.get-latest-tag.outputs.tag }} | cut -c2- )"
