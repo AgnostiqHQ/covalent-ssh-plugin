@@ -22,18 +22,19 @@
 
 
 import os
-from unittest.mock import patch, mock_open, AsyncMock
-import pytest
+from unittest.mock import AsyncMock, mock_open, patch
 
-from covalent.executor import SSHExecutor
+import pytest
 from covalent._shared_files.config import get_config
+from covalent.executor import SSHExecutor
+
 
 def test_init():
     """Test that initialization properly sets member variables."""
 
     executor = SSHExecutor(
-        username = "user",
-        hostname = "host",
+        username="user",
+        hostname="host",
     )
 
     assert executor.username == "user"
@@ -41,20 +42,19 @@ def test_init():
     assert executor.ssh_key_file == os.path.join(os.environ["HOME"], ".ssh/id_rsa")
     assert executor.cache_dir == os.path.join(
         os.environ.get("XDG_CACHE_HOME") or os.path.join(os.environ["HOME"], ".cache"),
-            "covalent",
-        )
+        "covalent",
+    )
     assert executor.remote_cache_dir == ".cache/covalent"
     assert executor.python3_path == ""
-    assert executor.run_local_on_ssh_fail == False
-    assert executor.conda_env == ""
-    assert executor.current_env_on_conda_fail == False
+    assert executor.run_local_on_ssh_fail is False
+
 
 def test_update_params():
     """Test that the executor configuration parameters are properly updated."""
-    
+
     executor = SSHExecutor(
-        username = "user",
-        hostname = "host",
+        username="user",
+        hostname="host",
     )
 
     params = get_config()["executors"]["ssh"]
@@ -64,46 +64,48 @@ def test_update_params():
     assert params["ssh_key_file"] == executor.ssh_key_file
     assert params["python3_path"] == executor.python3_path
 
+
 @pytest.mark.asyncio
 async def test_on_ssh_fail():
     """Test that the process runs locally upon connection errors."""
-    
+
     executor = SSHExecutor(
-        username = "user",
-        hostname = "host",
-        run_local_on_ssh_fail = True,
+        username="user",
+        hostname="host",
+        run_local_on_ssh_fail=True,
     )
 
     def simple_task(x):
-        return x ** 2
+        return x**2
 
-    executor.node_id = 0,
-    executor.dispatch_id = 0,
+    executor.node_id = (0,)
+    executor.dispatch_id = (0,)
     result = await executor.run(
-            function = simple_task,
-            args = [5],
-            kwargs = {},
-            task_metadata = {"dispatch_id": -1, "node_id": -1},
+        function=simple_task,
+        args=[5],
+        kwargs={},
+        task_metadata={"dispatch_id": -1, "node_id": -1},
     )
     assert result == 25
 
     executor.run_local_on_ssh_fail = False
     with pytest.raises(RuntimeError):
         result = await executor.run(
-                function = simple_task,
-                args = [5],
-                kwargs = {},
-                task_metadata = {"dispatch_id": -1, "node_id": -1},
-            )
+            function=simple_task,
+            args=[5],
+            kwargs={},
+            task_metadata={"dispatch_id": -1, "node_id": -1},
+        )
+
 
 @pytest.mark.asyncio
 async def test_client_connect(mocker):
     """Test that connection will fail if credentials are not supplied."""
-    
+
     executor = SSHExecutor(
-        username = "user",
-        hostname = "host",
-        ssh_key_file = "non-existant_key",
+        username="user",
+        hostname="host",
+        ssh_key_file="non-existant_key",
     )
 
     connected, _ = await executor._client_connect()
@@ -116,7 +118,7 @@ async def test_client_connect(mocker):
     assert connected is False
 
     # Patch to make call to paramiko.SSHClient.connect not fail with incorrect user/host/keyfile.
-    mocker.patch("os.path.exists", return_value = True)
+    mocker.patch("os.path.exists", return_value=True)
     mocker.patch("asyncssh.connect", AsyncMock())
     connected, _ = await executor._client_connect()
     assert connected is True
@@ -124,15 +126,15 @@ async def test_client_connect(mocker):
 
 def test_file_writes():
     """Test that files get written to the correct locations."""
-    
+
     executor = SSHExecutor(
-        username = "user",
-        hostname = "host",
+        username="user",
+        hostname="host",
     )
 
     def simple_task(x):
         return x
-    
+
     operation_id = "dispatchid_taskid"
 
     @patch("builtins.open", new_callable=mock_open())
@@ -144,22 +146,20 @@ def test_file_writes():
             {},
         )
 
-    function_file, script_file, remote_function_file, remote_script_file, remote_result_file = write_files()
+    (
+        function_file,
+        script_file,
+        remote_function_file,
+        remote_script_file,
+        remote_result_file,
+    ) = write_files()
 
     assert script_file == os.path.join(executor.cache_dir, f"exec_{operation_id}.py")
-    assert remote_script_file == os.path.join(
-        executor.remote_cache_dir,
-        f"exec_{operation_id}.py"
-    )
-    assert function_file == os.path.join(
-        executor.cache_dir,
-        f"function_{operation_id}.pkl"
-    )
+    assert remote_script_file == os.path.join(executor.remote_cache_dir, f"exec_{operation_id}.py")
+    assert function_file == os.path.join(executor.cache_dir, f"function_{operation_id}.pkl")
     assert remote_function_file == os.path.join(
-        executor.remote_cache_dir,
-        f"function_{operation_id}.pkl"
+        executor.remote_cache_dir, f"function_{operation_id}.pkl"
     )
     assert remote_result_file == os.path.join(
-        executor.remote_cache_dir,
-        f"result_{operation_id}.pkl"
+        executor.remote_cache_dir, f"result_{operation_id}.pkl"
     )
