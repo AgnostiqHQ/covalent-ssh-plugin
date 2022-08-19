@@ -322,17 +322,12 @@ class SSHExecutor(BaseAsyncExecutor):
         app_log.debug(message)
 
         if self.conda_env:
-            which_python = await conn.run("which python")
-            app_log.debug(f"Current python on remote is: {which_python.stdout}")
-
-            app_log.debug(f"Activating conda environment: {self.conda_env}")
-            activate_conda = await conn.run(f"conda activate {self.conda_env}")
-
-            which_python = await conn.run("which python")
-            app_log.debug(f"Updated python on remote is: {which_python.stdout}")
+            app_log.debug(f"Verifying if conda env {self.conda_env} exists")
+            completed_proc = await conn.run(f"conda env list | grep {self.conda_env}")
             
-            if activate_conda.stderr.strip():
-                message = f"No conda environment named {self.conda_env} found on remote machine."
+            if completed_proc.returncode != 0:
+                message = (completed_proc.stderr.strip() or
+                           f"No conda environment named {self.conda_env} found on remote machine.")
                 return self._on_ssh_fail(function, args, kwargs, message)
 
         version_check = await conn.run(f"{self.python_path} --version")
@@ -363,7 +358,11 @@ class SSHExecutor(BaseAsyncExecutor):
 
         # Run the function:
         cmd = f"{self.python_path} {remote_script_file}"
-        app_log.debug(f"Running the function on remote now with command {cmd}")
+
+        if self.conda_env:
+            cmd = f"conda activate {self.conda_env} && {cmd}"
+
+        app_log.debug(f"Running the function on remote now with command: {cmd}")
         result = await conn.run(cmd)
         app_log.debug("Function run finished")
 
@@ -391,7 +390,7 @@ class SSHExecutor(BaseAsyncExecutor):
         app_log.debug("Loading result file")
         with open(result_file, "rb") as f_in:
             result, exception = pickle.load(f_in)
-        
+
 
         if self.do_cleanup:
             app_log.debug("Performing cleanup on local and remote")
