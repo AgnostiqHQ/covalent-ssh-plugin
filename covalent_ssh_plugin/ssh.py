@@ -189,6 +189,7 @@ class SSHExecutor(BaseAsyncExecutor):
         params["executors"]["ssh"]["ssh_key_file"] = self.ssh_key_file
         params["executors"]["ssh"]["python_path"] = self.python_path
         params["executors"]["ssh"]["run_local_on_ssh_fail"] = self.run_local_on_ssh_fail
+        params["executors"]["ssh"]["conda_env"] = self.conda_env
 
         update_config(params, override_existing=True)
 
