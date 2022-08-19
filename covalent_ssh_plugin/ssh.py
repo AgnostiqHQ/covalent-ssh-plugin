@@ -70,9 +70,9 @@ class SSHExecutor(BaseAsyncExecutor):
 
     def __init__(
         self,
-        username: str,
-        hostname: str,
-        ssh_key_file: str = os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
+        username: str = "",
+        hostname: str = "",
+        ssh_key_file: str = "",
         cache_dir: str = os.path.join(
             os.environ.get("XDG_CACHE_HOME") or os.path.join(os.environ["HOME"], ".cache"),
             "covalent",
