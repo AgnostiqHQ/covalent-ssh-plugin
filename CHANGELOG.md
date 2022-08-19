@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+## [0.7.0] - 2022-08-19
+
 ### Changed
 
 - `python3_path` has been changed to `python_path`
