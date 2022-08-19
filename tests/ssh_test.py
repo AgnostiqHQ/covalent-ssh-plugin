@@ -26,43 +26,47 @@ from unittest.mock import AsyncMock, mock_open, patch
 
 import pytest
 from covalent._shared_files.config import get_config
-from covalent.executor import SSHExecutor
+from covalent_ssh_plugin import SSHExecutor
+from pathlib import Path
 
 
 def test_init():
     """Test that initialization properly sets member variables."""
 
+    key_path = str(Path("key_file").expanduser().resolve())
+
     executor = SSHExecutor(
         username="user",
         hostname="host",
+        ssh_key_file=key_path,
     )
 
     assert executor.username == "user"
     assert executor.hostname == "host"
-    assert executor.ssh_key_file == os.path.join(os.environ["HOME"], ".ssh/id_rsa")
-    assert executor.cache_dir == os.path.join(
-        os.environ.get("XDG_CACHE_HOME") or os.path.join(os.environ["HOME"], ".cache"),
-        "covalent",
-    )
+    assert executor.ssh_key_file == key_path
+    assert executor.cache_dir == get_config("dispatcher.cache_dir")
     assert executor.remote_cache_dir == ".cache/covalent"
-    assert executor.python3_path == ""
+    assert executor.python_path == "python"
     assert executor.run_local_on_ssh_fail is False
 
 
 def test_update_params():
     """Test that the executor configuration parameters are properly updated."""
 
+    key_path = str(Path("key_file").expanduser().resolve())
+
     executor = SSHExecutor(
         username="user",
         hostname="host",
+        ssh_key_file="key_file",
     )
 
     params = get_config()["executors"]["ssh"]
 
     assert params["username"] == executor.username == "user"
     assert params["hostname"] == executor.hostname == "host"
-    assert params["ssh_key_file"] == executor.ssh_key_file
-    assert params["python3_path"] == executor.python3_path
+    assert params["ssh_key_file"] == executor.ssh_key_file == key_path
+    assert params["python_path"] == executor.python_path
 
 
 @pytest.mark.asyncio
@@ -72,6 +76,7 @@ async def test_on_ssh_fail():
     executor = SSHExecutor(
         username="user",
         hostname="host",
+        ssh_key_file="key_file",
         run_local_on_ssh_fail=True,
     )
 
@@ -130,6 +135,7 @@ def test_file_writes():
     executor = SSHExecutor(
         username="user",
         hostname="host",
+        ssh_key_file="key_file",
     )
 
     def simple_task(x):
