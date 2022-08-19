@@ -190,7 +190,7 @@ class SSHExecutor(BaseAsyncExecutor):
         params["executors"]["ssh"]["python_path"] = self.python_path
         params["executors"]["ssh"]["run_local_on_ssh_fail"] = self.run_local_on_ssh_fail
 
-        update_config(params, override_existing=False)
+        update_config(params, override_existing=True)
 
     def _on_ssh_fail(
         self,
