@@ -27,20 +27,23 @@ from unittest.mock import AsyncMock, mock_open, patch
 import pytest
 from covalent._shared_files.config import get_config
 from covalent_ssh_plugin import SSHExecutor
+from pathlib import Path
 
 
 def test_init():
     """Test that initialization properly sets member variables."""
 
+    key_path = str(Path("key_file").expanduser().resolve())
+
     executor = SSHExecutor(
         username="user",
         hostname="host",
-        ssh_key_file="key_file",
+        ssh_key_file=key_path,
     )
 
     assert executor.username == "user"
     assert executor.hostname == "host"
-    assert executor.ssh_key_file == "key_file"
+    assert executor.ssh_key_file == key_path
     assert executor.cache_dir == get_config("dispatcher.cache_dir")
     assert executor.remote_cache_dir == ".cache/covalent"
     assert executor.python_path == "python"
@@ -49,6 +52,8 @@ def test_init():
 
 def test_update_params():
     """Test that the executor configuration parameters are properly updated."""
+
+    key_path = str(Path("key_file").expanduser().resolve())
 
     executor = SSHExecutor(
         username="user",
@@ -60,7 +65,7 @@ def test_update_params():
 
     assert params["username"] == executor.username == "user"
     assert params["hostname"] == executor.hostname == "host"
-    assert params["ssh_key_file"] == executor.ssh_key_file == "key_file"
+    assert params["ssh_key_file"] == executor.ssh_key_file == key_path
     assert params["python_path"] == executor.python_path
 
 
