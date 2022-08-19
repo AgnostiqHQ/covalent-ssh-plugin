@@ -39,6 +39,17 @@ executor_plugin_name = "SSHExecutor"
 app_log = logger.app_log
 log_stack_info = logger.log_stack_info
 
+_EXECUTOR_PLUGIN_DEFAULTS = {
+    "username": "",
+    "hostname": "",
+    "ssh_key_file": os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
+    "cache_dir": str(Path(get_config("dispatcher.cache_dir")).expanduser().resolve()),
+    "remote_cache_dir": ".cache/covalent",
+    "python_path": "python",
+    "run_local_on_ssh_fail": False,
+    "conda_env": ""
+}
+
 class SSHExecutor(BaseAsyncExecutor):
     """
     Async executor class that invokes the input function on a remote server.
