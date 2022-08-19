@@ -45,7 +45,7 @@ def test_init():
         "covalent",
     )
     assert executor.remote_cache_dir == ".cache/covalent"
-    assert executor.python3_path == ""
+    assert executor.python_path == ""
     assert executor.run_local_on_ssh_fail is False
 
 
@@ -62,7 +62,7 @@ def test_update_params():
     assert params["username"] == executor.username == "user"
     assert params["hostname"] == executor.hostname == "host"
     assert params["ssh_key_file"] == executor.ssh_key_file
-    assert params["python3_path"] == executor.python3_path
+    assert params["python_path"] == executor.python_path
 
 
 @pytest.mark.asyncio
