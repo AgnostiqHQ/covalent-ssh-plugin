@@ -62,8 +62,10 @@ class SSHExecutor(BaseAsyncExecutor):
         ssh_key_file: str,
         cache_dir: str = None,
         python_path: str = "python",
+        conda_env: str = None,
         remote_cache_dir: str = ".cache/covalent",
         run_local_on_ssh_fail: bool = False,
+        do_cleanup: bool = True,
         **kwargs,
     ) -> None:
 
@@ -79,6 +81,8 @@ class SSHExecutor(BaseAsyncExecutor):
         self.remote_cache_dir = remote_cache_dir
         self.python_path = python_path
         self.run_local_on_ssh_fail = run_local_on_ssh_fail
+        self.do_cleanup = do_cleanup
+        self.conda_env = conda_env
 
         # Write executor-specific parameters to the configuration file, if they were missing:
         self._update_params()
@@ -311,32 +315,38 @@ class SSHExecutor(BaseAsyncExecutor):
         ssh_success, conn = await self._client_connect()
 
         if not ssh_success:
-            message = f"Could not connect to host '{self.hostname}' as user '{self.username}'"
+            message = f"Could not connect to host: '{self.hostname}' as user: '{self.username}'"
             return self._on_ssh_fail(function, args, kwargs, message)
 
-        message = f"Executing node {node_id} on host {self.hostname}."
+        message = f"Executing node {node_id} on host {self.hostname} with username {self.username}."
         app_log.debug(message)
 
-        if not self.python_path:
-            cmd = "which python3"
+        if self.conda_env:
+            which_python = await conn.run("which python")
+            app_log.debug(f"Current python on remote is: {which_python.stdout}")
 
-            result = await conn.run(cmd)
-            client_out = result.stdout
-            client_err = result.stderr
+            app_log.debug(f"Activating conda environment: {self.conda_env}")
+            activate_conda = await conn.run(f"conda activate {self.conda_env}")
 
-            self.python_path = client_out.strip()
+            which_python = await conn.run("which python")
+            app_log.debug(f"Updated python on remote is: {which_python.stdout}")
+            
+            if activate_conda.stderr.strip():
+                message = f"No conda environment named {self.conda_env} found on remote machine."
+                return self._on_ssh_fail(function, args, kwargs, message)
 
-        if not self.python_path:
-            message = f"No Python 3 installation found on host machine {self.hostname}"
+        version_check = await conn.run(f"{self.python_path} --version")
+        if "3" not in version_check.stdout.strip():
+            message = f"No Python 3 installation found on remote machine {self.hostname}"
             return self._on_ssh_fail(function, args, kwargs, message)
 
         app_log.debug(f"Remote python being used is {self.python_path}")
 
         cmd = f"mkdir -p {self.remote_cache_dir}"
 
-        result = await conn.run(cmd)
-        client_out = result.stdout
-        if client_err := result.stderr:
+        mkdir_cache = await conn.run(cmd)
+        client_out = mkdir_cache.stdout
+        if client_err := mkdir_cache.stderr:
             app_log.warning(client_err)
 
         # Pickle and save location of the function and its arguments:
@@ -364,8 +374,8 @@ class SSHExecutor(BaseAsyncExecutor):
         # Check that a result file was produced:
         app_log.debug("Checking result file was produced")
         cmd = f"ls {remote_result_file}"
-        result = await conn.run(cmd)
-        client_out = result.stdout
+        check_result_file = await conn.run(cmd)
+        client_out = check_result_file.stdout
         if client_out.strip() != remote_result_file:
             message = (
                 f"Result file {remote_result_file} on remote host {self.hostname} was not found"
@@ -382,17 +392,18 @@ class SSHExecutor(BaseAsyncExecutor):
         with open(result_file, "rb") as f_in:
             result, exception = pickle.load(f_in)
         
-        # Perform cleanup
-        app_log.debug("Performing cleanup on local and remote")
-        await self.cleanup(
-            conn=conn,
-            function_file=function_file,
-            script_file=script_file,
-            result_file=result_file,
-            remote_function_file=remote_function_file,
-            remote_script_file=remote_script_file,
-            remote_result_file=remote_result_file,
-        )
+
+        if self.do_cleanup:
+            app_log.debug("Performing cleanup on local and remote")
+            await self.cleanup(
+                conn=conn,
+                function_file=function_file,
+                script_file=script_file,
+                result_file=result_file,
+                remote_function_file=remote_function_file,
+                remote_script_file=remote_script_file,
+                remote_result_file=remote_result_file,
+            )
 
         if exception is not None:
             app_log.debug(f"exception: {exception}")
