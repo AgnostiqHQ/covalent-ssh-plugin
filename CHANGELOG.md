@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+### Fixed
+
+- Added additional logging and explicit SSH close connection call to avoid wait_closed() call from hanging
+
 ## [0.6.0] - 2022-08-18
 
 ### Changed
