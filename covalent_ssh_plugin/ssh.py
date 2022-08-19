@@ -353,8 +353,12 @@ class SSHExecutor(BaseAsyncExecutor):
             remote_result_file,
         ) = self._write_function_files(operation_id, function, args, kwargs)
 
+        app_log.debug('Copying function file to remote machine...')
+
         await asyncssh.scp(function_file, (conn, remote_function_file))
         await asyncssh.scp(script_file, (conn, remote_script_file))
+
+        app_log.debug('Running function file in remote machine...')
 
         # Run the function:
         cmd = f"{self.python_path} {remote_script_file}"
@@ -370,6 +374,8 @@ class SSHExecutor(BaseAsyncExecutor):
             app_log.warning(result_err)
             return self._on_ssh_fail(function, args, kwargs, result_err)
 
+        app_log.debug('Checking that result file was produced in remote machine...')
+
         # Check that a result file was produced:
         app_log.debug("Checking result file was produced")
         cmd = f"ls {remote_result_file}"
@@ -383,14 +389,14 @@ class SSHExecutor(BaseAsyncExecutor):
 
         # scp the pickled result to the local machine here:
         result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
-        app_log.debug(f"Copying result file to {result_file}")
+
+        app_log.debug(f"Copying result file from remote machine to local path {result_file}...")
         await asyncssh.scp((conn, remote_result_file), result_file)
 
         # Load the result file:
         app_log.debug("Loading result file")
         with open(result_file, "rb") as f_in:
             result, exception = pickle.load(f_in)
-
 
         if self.do_cleanup:
             app_log.debug("Performing cleanup on local and remote")
@@ -408,7 +414,10 @@ class SSHExecutor(BaseAsyncExecutor):
             app_log.debug(f"exception: {exception}")
             raise exception
 
-        app_log.debug("Closing connection")
+        app_log.debug("Closing SSH connection...")
         conn.close()
         await conn.wait_closed()
+
+        app_log.debug('SSH Connection closed. SSH executor run finished. Returning result file...')
+        
         return result
