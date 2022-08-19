@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+### Changed
+
+- `python3_path` has been changed to `python_path`
+- `ssh_key_file` is now a required parameter
+- Default `python_path` value is now `python`
+- `cache_dir` default simplified and relies on `get_config("dispatcher.cache_dir")` now
+- `cache_dir` and `ssh_key_file` now support relative paths, they get converted to abs internally automatically
+
+### Added
+
+- `SSHExecutor` is now importable from `covalent_ssh_plugin`
+- `conda_env` parameter added which can be used to execute the function in a separate conda environment on the remote machine
+- Added `do_cleanup` (`True` by default) parameter to allow cleanup of various files created locally, and on remote machine
+- Added more logging statements for better debugging
+
+### Tests
+
+- Updated tests to reflect above changes
+
 ## [0.6.1] - 2022-08-19
 
 ### Fixed
