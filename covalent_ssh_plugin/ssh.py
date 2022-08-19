@@ -33,6 +33,7 @@ from covalent._results_manager.result import Result
 from covalent._shared_files import logger
 from covalent._shared_files.config import update_config
 from covalent.executor.base import BaseAsyncExecutor
+from pathlib import Path
 
 executor_plugin_name = "SSHExecutor"
 
@@ -70,22 +71,22 @@ class SSHExecutor(BaseAsyncExecutor):
 
     def __init__(
         self,
-        username: str = "",
-        hostname: str = "",
-        ssh_key_file: str = "",
+        username: str,
+        hostname: str,
+        ssh_key_file: str,
+        python3_path: str = "python",
         cache_dir: str = os.path.join(
             os.environ.get("XDG_CACHE_HOME") or os.path.join(os.environ["HOME"], ".cache"),
             "covalent",
         ),
         remote_cache_dir: str = ".cache/covalent",
-        python3_path: str = "",
         run_local_on_ssh_fail: bool = False,
         **kwargs,
     ) -> None:
 
         self.username = username
         self.hostname = hostname
-        self.ssh_key_file = ssh_key_file
+        self.ssh_key_file = str(Path(ssh_key_file).expanduser().resolve())
         self.cache_dir = cache_dir
         self.remote_cache_dir = remote_cache_dir
 
@@ -235,8 +236,7 @@ class SSHExecutor(BaseAsyncExecutor):
             return result
         else:
             app_log.error(message)
-            print(f"{message}", file=sys.stderr)
-            raise RuntimeError
+            raise RuntimeError(message)
 
     async def _client_connect(self) -> bool:
         """
@@ -265,7 +265,7 @@ class SSHExecutor(BaseAsyncExecutor):
                 app_log.error(e)
 
         else:
-            message = "no SSH key file found. Cannot connect to host."
+            message = f"no SSH key file found at {self.ssh_key_file}. Cannot connect to host."
             app_log.error(message)
 
         return ssh_success, conn
@@ -324,6 +324,7 @@ class SSHExecutor(BaseAsyncExecutor):
             client_err = result.stderr
             # self.python3_path = client_out.read().decode("utf8").strip()
             self.python3_path = client_out.strip()
+            app_log.debug(f"Python being used is {self.python3_path}")
 
         if self.python3_path == "":
             message = f"No Python 3 installation found on host machine {self.hostname}"
@@ -353,12 +354,17 @@ class SSHExecutor(BaseAsyncExecutor):
 
         # Run the function:
         cmd = f"{self.python3_path} {remote_script_file}"
+        app_log.debug(f"Running the function on remote now with command {cmd}")
         result = await conn.run(cmd)
+
+        app_log.debug("Function run complete")
+        
         err = result.stderr.strip()
         if err != "":
             app_log.warning(err)
 
         # Check that a result file was produced:
+        app_log.debug("Checking result file was produced")
         cmd = f"ls {remote_result_file}"
         result = await conn.run(cmd)
         client_out = result.stdout
@@ -370,9 +376,11 @@ class SSHExecutor(BaseAsyncExecutor):
 
         # scp the pickled result to the local machine here:
         result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
+        app_log.debug(f"Copying result file to {result_file}")
         await asyncssh.scp((conn, remote_result_file), result_file)
 
         # Load the result file:
+        app_log.debug("Loading result file")
         with open(result_file, "rb") as f_in:
             result, exception = pickle.load(f_in)
 
@@ -380,5 +388,7 @@ class SSHExecutor(BaseAsyncExecutor):
             app_log.debug(f"exception: {exception}")
             raise exception
 
+        app_log.debug("Closing connection")
+        conn.close()
         await conn.wait_closed()
         return result
