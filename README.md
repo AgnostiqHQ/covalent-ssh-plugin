@@ -22,7 +22,7 @@ The following shows an example of how a user might modify their Covalent [config
 [executors.ssh]
 username = "user"
 hostname = "host.hostname.org"
-remote_dir = "/home/user/.cache/covalent"
+remote_cache_dir = "/home/user/.cache/covalent"
 ssh_key_file = "/home/user/.ssh/id_rsa"
 python_path = "/home/centos/miniconda3/envs/my-python-3.8-env/bin/python"
 ```
@@ -50,7 +50,7 @@ or use a class object to customize behavior within particular tasks:
 executor = ct.executor.SSHExecutor(
     username="user",
     hostname="host2.hostname.org",
-    remote_dir="/tmp/covalent",
+    remote_cache_dir="/tmp/covalent",
     ssh_key_file="/home/user/.ssh/host2/id_rsa",
     python_path="/home/centos/miniconda3/envs/my-python-3.8-env/bin/python"
 )

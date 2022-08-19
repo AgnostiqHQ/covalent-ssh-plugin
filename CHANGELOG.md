@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Default `python_path` value is now `python`
 - `cache_dir` default simplified and relies on `get_config("dispatcher.cache_dir")` now
 - `cache_dir` and `ssh_key_file` now support relative paths, they get converted to abs internally automatically
+- Appropriately changed variable names
 
 ### Added
 
@@ -21,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `conda_env` parameter added which can be used to execute the function in a separate conda environment on the remote machine
 - Added `do_cleanup` (`True` by default) parameter to allow cleanup of various files created locally, and on remote machine
 - Added more logging statements for better debugging
+- Added `*.ipynb` files to `.gitignore` for easier experimentation
+
+### Fixed
+
+- Fixed reference of `remote_dir` to `remote_cache_dir` in `README.md`
 
 ### Tests
 
