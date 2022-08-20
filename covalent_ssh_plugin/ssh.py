@@ -191,7 +191,7 @@ class SSHExecutor(BaseAsyncExecutor):
         params["executors"]["ssh"]["run_local_on_ssh_fail"] = self.run_local_on_ssh_fail
         params["executors"]["ssh"]["conda_env"] = self.conda_env
 
-        update_config(params, override_existing=True)
+        update_config(params, override_existing=False)
 
     def _on_ssh_fail(
         self,
