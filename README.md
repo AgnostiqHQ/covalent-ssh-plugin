@@ -24,14 +24,13 @@ username = "user"
 hostname = "host.hostname.org"
 remote_cache_dir = "/home/user/.cache/covalent"
 ssh_key_file = "/home/user/.ssh/id_rsa"
-python_path = "/home/centos/miniconda3/envs/my-python-3.8-env/bin/python"
+python_path = "python"
+conda_env = ""
 ```
-
-Note that `python_path` is optional (see below for more information).
 
 This setup assumes the user has the ability to connect to the remote machine using `ssh -i /home/user/.ssh/id_rsa user@host.hostname.org` and has write-permissions on the remote directory `/home/user/.cache/covalent` (if it exists) or the closest parent directory (if it does not).
 
-It may be necessary to specify the absolute path to python that you are using if you rely on activating a virtualenv to manage your python dependencies on your remote machine. For example when creating a new conda environment you can explicitly specify the python path by using the `python_path` configuration option (as above) otherwise it will default to resolving your python installation with `which python`.
+If you are using a named conda environment you can use the `conda_env` parameter to set the name of your conda environment. However if you wish use a specify a particular python binary you can configure the `python_path` parameter to the absolute path where python is located on the remote machine.
 
 Within a workflow, users can decorate electrons using the default settings:
 
@@ -51,8 +50,7 @@ executor = ct.executor.SSHExecutor(
     username="user",
     hostname="host2.hostname.org",
     remote_cache_dir="/tmp/covalent",
-    ssh_key_file="/home/user/.ssh/host2/id_rsa",
-    python_path="/home/centos/miniconda3/envs/my-python-3.8-env/bin/python"
+    ssh_key_file="/home/user/.ssh/host2/id_rsa"
 )
 
 @ct.electron(executor=executor)

@@ -25,48 +25,49 @@ import os
 from unittest.mock import AsyncMock, mock_open, patch
 
 import pytest
-from covalent._shared_files.config import get_config
+
 from covalent_ssh_plugin import SSHExecutor
-from pathlib import Path
 
 
-def test_init():
+def test_init(tmp_path):
     """Test that initialization properly sets member variables."""
 
-    key_path = str(Path("key_file").expanduser().resolve())
+    key_path = tmp_path / "key_file"
+    key_path.touch()
 
-    executor = SSHExecutor(
-        username="user",
-        hostname="host",
-        ssh_key_file=key_path,
-    )
+    cache_dir = tmp_path / "cache_dir"
 
-    assert executor.username == "user"
-    assert executor.hostname == "host"
-    assert executor.ssh_key_file == key_path
-    assert executor.cache_dir == get_config("dispatcher.cache_dir")
-    assert executor.remote_cache_dir == ".cache/covalent"
-    assert executor.python_path == "python"
-    assert executor.run_local_on_ssh_fail is False
+    _config_data = {
+        "dispatcher.cache_dir": str(cache_dir),
+        "executors.ssh.user": "centos",
+        "executors.ssh.hostname": "12.12.12.12",
+        "executors.ssh.ssh_key_file": "~/.ssh/id_rsa",
+        "executors.ssh.remote_cache_dir": "/home/centos",
+        "executors.ssh.python_path": "python3.8",
+        "executors.ssh.conda_env": "py-3.8",
+    }
 
+    def get_config_mock(key):
+        return _config_data[key]
 
-def test_update_params():
-    """Test that the executor configuration parameters are properly updated."""
+    with patch("covalent._shared_files.config._config_manager") as _config_manager_mock:
+        _config_manager_mock.config_data = _config_data
+        _config_manager_mock.get.side_effect = get_config_mock
 
-    key_path = str(Path("key_file").expanduser().resolve())
+        executor = SSHExecutor(
+            username="user",
+            hostname="host",
+            ssh_key_file=str(key_path),
+        )
 
-    executor = SSHExecutor(
-        username="user",
-        hostname="host",
-        ssh_key_file="key_file",
-    )
-
-    params = get_config()["executors"]["ssh"]
-
-    assert params["username"] == executor.username == "user"
-    assert params["hostname"] == executor.hostname == "host"
-    assert params["ssh_key_file"] == executor.ssh_key_file == key_path
-    assert params["python_path"] == executor.python_path
+        assert executor.username == "user"
+        assert executor.hostname == "host"
+        assert executor.ssh_key_file == str(key_path)
+        assert executor.cache_dir == _config_data["dispatcher.cache_dir"]
+        assert executor.remote_cache_dir == _config_data["executors.ssh.remote_cache_dir"]
+        assert executor.python_path == _config_data["executors.ssh.python_path"]
+        assert executor.run_local_on_ssh_fail is False
+        assert executor.do_cleanup is True
 
 
 @pytest.mark.asyncio
