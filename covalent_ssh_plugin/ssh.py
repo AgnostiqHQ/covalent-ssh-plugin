@@ -24,15 +24,15 @@ Executor plugin for executing the function on a remote machine through SSH.
 
 import os
 import socket
+from pathlib import Path
 from typing import Any, Callable, Coroutine, Dict, Tuple, Union
 
 import asyncssh
 import cloudpickle as pickle
 from covalent._results_manager.result import Result
 from covalent._shared_files import logger
-from covalent._shared_files.config import update_config, get_config
+from covalent._shared_files.config import get_config, update_config
 from covalent.executor.base import BaseAsyncExecutor
-from pathlib import Path
 
 executor_plugin_name = "SSHExecutor"
 
@@ -47,8 +47,9 @@ _EXECUTOR_PLUGIN_DEFAULTS = {
     "remote_cache_dir": ".cache/covalent",
     "python_path": "python",
     "run_local_on_ssh_fail": False,
-    "conda_env": ""
+    "conda_env": "",
 }
+
 
 class SSHExecutor(BaseAsyncExecutor):
     """
@@ -72,9 +73,9 @@ class SSHExecutor(BaseAsyncExecutor):
         hostname: str,
         ssh_key_file: str,
         cache_dir: str = None,
-        python_path: str = "python",
+        python_path: str = "",
         conda_env: str = None,
-        remote_cache_dir: str = ".cache/covalent",
+        remote_cache_dir: str = "",
         run_local_on_ssh_fail: bool = False,
         do_cleanup: bool = True,
         **kwargs,
@@ -82,21 +83,22 @@ class SSHExecutor(BaseAsyncExecutor):
 
         super().__init__(**kwargs)
 
-        self.username = username
-        self.hostname = hostname
+        self.username = username or get_config("executors.ssh.username")
+        self.hostname = hostname or get_config("executors.ssh.hostname")
+        self.remote_cache_dir = (
+            remote_cache_dir or get_config("executors.ssh.remote_cache_dir") or ".cache/covalent"
+        )
+        self.python_path = python_path or get_config("executors.ssh.python_path") or "python"
+        self.conda_env = conda_env or get_config("executors.ssh.conda_env")
+
+        ssh_key_file = ssh_key_file or get_config("executors.ssh.ssh_key_file")
         self.ssh_key_file = str(Path(ssh_key_file).expanduser().resolve())
 
         self.cache_dir = cache_dir or get_config("dispatcher.cache_dir")
         self.cache_dir = str(Path(self.cache_dir).expanduser().resolve())
 
-        self.remote_cache_dir = remote_cache_dir
-        self.python_path = python_path
         self.run_local_on_ssh_fail = run_local_on_ssh_fail
         self.do_cleanup = do_cleanup
-        self.conda_env = conda_env
-
-        # Write executor-specific parameters to the configuration file, if they were missing:
-        self._update_params()
 
     def _write_function_files(
         self,
@@ -170,28 +172,6 @@ class SSHExecutor(BaseAsyncExecutor):
             remote_script_file,
             remote_result_file,
         )
-
-    def _update_params(self) -> None:
-        """
-        Helper function for setting configuration values, if they were missing from the
-            configuration file.
-
-        Args:
-            None
-
-        Returns:
-            None
-        """
-
-        params = {"executors": {"ssh": {}}}
-        params["executors"]["ssh"]["username"] = self.username
-        params["executors"]["ssh"]["hostname"] = self.hostname
-        params["executors"]["ssh"]["ssh_key_file"] = self.ssh_key_file
-        params["executors"]["ssh"]["python_path"] = self.python_path
-        params["executors"]["ssh"]["run_local_on_ssh_fail"] = self.run_local_on_ssh_fail
-        params["executors"]["ssh"]["conda_env"] = self.conda_env
-
-        update_config(params, override_existing=False)
 
     def _on_ssh_fail(
         self,
@@ -268,7 +248,7 @@ class SSHExecutor(BaseAsyncExecutor):
         """
 
         return info_dict.get("STATUS", Result.NEW_OBJ)
-    
+
     async def cleanup(
         self,
         conn,
@@ -290,7 +270,7 @@ class SSHExecutor(BaseAsyncExecutor):
             remote_function_file:
             remote_script_file:
             remote_result_file:
-        
+
         Returns:
             None
         """
@@ -330,16 +310,20 @@ class SSHExecutor(BaseAsyncExecutor):
             message = f"Could not connect to host: '{self.hostname}' as user: '{self.username}'"
             return self._on_ssh_fail(function, args, kwargs, message)
 
-        message = f"Executing node {node_id} on host {self.hostname} with username {self.username}."
+        message = (
+            f"Executing node {node_id} on host {self.hostname} with username {self.username}."
+        )
         app_log.debug(message)
 
         if self.conda_env:
             app_log.debug(f"Verifying if conda env {self.conda_env} exists")
             completed_proc = await conn.run(f"conda env list | grep {self.conda_env}")
-            
+
             if completed_proc.returncode != 0:
-                message = (completed_proc.stderr.strip() or
-                           f"No conda environment named {self.conda_env} found on remote machine.")
+                message = (
+                    completed_proc.stderr.strip()
+                    or f"No conda environment named {self.conda_env} found on remote machine."
+                )
                 return self._on_ssh_fail(function, args, kwargs, message)
 
         version_check = await conn.run(f"{self.python_path} --version")
@@ -365,12 +349,12 @@ class SSHExecutor(BaseAsyncExecutor):
             remote_result_file,
         ) = self._write_function_files(operation_id, function, args, kwargs)
 
-        app_log.debug('Copying function file to remote machine...')
+        app_log.debug("Copying function file to remote machine...")
 
         await asyncssh.scp(function_file, (conn, remote_function_file))
         await asyncssh.scp(script_file, (conn, remote_script_file))
 
-        app_log.debug('Running function file in remote machine...')
+        app_log.debug("Running function file in remote machine...")
 
         # Run the function:
         cmd = f"{self.python_path} {remote_script_file}"
@@ -386,7 +370,7 @@ class SSHExecutor(BaseAsyncExecutor):
             app_log.warning(result_err)
             return self._on_ssh_fail(function, args, kwargs, result_err)
 
-        app_log.debug('Checking that result file was produced in remote machine...')
+        app_log.debug("Checking that result file was produced in remote machine...")
 
         # Check that a result file was produced:
         app_log.debug("Checking result file was produced")
@@ -430,6 +414,6 @@ class SSHExecutor(BaseAsyncExecutor):
         conn.close()
         await conn.wait_closed()
 
-        app_log.debug('SSH Connection closed. SSH executor run finished. Returning result file...')
-        
+        app_log.debug("SSH Connection closed. SSH executor run finished. Returning result file...")
+
         return result
