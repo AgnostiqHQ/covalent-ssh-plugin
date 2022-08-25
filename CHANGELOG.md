@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added basic functional test for CI
+
+### Added
+
 - Added back `_EXECUTOR_PLUGIN_DEFAULTS` to ssh plugin
 
 ## [0.7.0] - 2022-08-19
