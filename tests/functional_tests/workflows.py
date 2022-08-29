@@ -6,9 +6,11 @@ import sys
 import covalent as ct
 
 try:
+    terraform_dir = os.getenv("TF_DIR")
     proc = subprocess.run(
         [
             "terraform",
+            f"-chdir={terraform_dir}",
             "output",
             "-json",
         ],
