@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+### Changed
+
+- Added conda bash hooks in order to activate environments properly in non-interactive sessions
+
 ### Tests
 
 - Enabled Codecov
