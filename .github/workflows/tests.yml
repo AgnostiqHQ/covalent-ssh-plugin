@@ -78,7 +78,6 @@ jobs:
           tar xzf covalent-ssh-plugin-${VERSION}.tar.gz
           diff -r covalent-ssh-plugin-${VERSION}/covalent_ssh_plugin/ ../covalent_ssh_plugin/
           rm -rf covalent-ssh-plugin-${VERSION}/
-          cd ..
 
       - name: Install SSH plugin
         run: |
@@ -89,11 +88,24 @@ jobs:
         run: covalent start --ignore-migrations
 
       - name: Test plugin loading
-        run: python -c "from covalent.executor import SSHExecutor"
+        run: from covalent.executor import SSHExecutor
+        shell: python
 
       - name: Run tests
         run: |
-          PYTHONPATH=$PWD/tests pytest -vv tests/
+          PYTHONPATH=$PWD/tests pytest -vv tests/ --cov=covalent_ssh_plugin
+
+      - name: Generate coverage report
+        run: coverage xml -o coverage.xml
+      
+      - name: Upload report to Codecov
+        if: >
+          matrix.os == 'ubuntu-latest'
+          && matrix.container == 'python:3.8-buster'
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          name: "Plugin Unit Tests"
 
       - name: Get latest release
         uses: actions-ecosystem/action-get-latest-tag@v1
