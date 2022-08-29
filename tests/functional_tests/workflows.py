@@ -5,18 +5,22 @@ import sys
 
 import covalent as ct
 
-proc = subprocess.run(
-    [
-        "terraform",
-        "output",
-        "-json",
-    ],
-    check=True,
-    capture_output=True,
-)
-
-ec2_public_ip = json.loads(proc.stdout.decode())["ec2_public_ip"]["value"]
-print(f"Got public IP: {ec2_public_ip}")
+try:
+    proc = subprocess.run(
+        [
+            "terraform",
+            "output",
+            "-json",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    output_json = json.loads(proc.stdout.decode())
+    print(output_json)
+    ec2_public_ip = output_json["ec2_public_ip"]["value"]
+    print(f"Got public IP: {ec2_public_ip}")
+except Exception as e:
+    print(e)
 
 executor = ct.executor.SSHExecutor(
     username=os.getenv("SSH_EXECUTOR_USERNAME", "ubuntu"),
