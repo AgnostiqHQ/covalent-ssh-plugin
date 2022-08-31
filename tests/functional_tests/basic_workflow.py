@@ -2,12 +2,13 @@ import sys
 
 import covalent as ct
 
-from .executor import executor
+# Extract terraform outputs & instantiate executor
+import executor_instance
 
 # Basic Workflow
 
 
-@ct.electron(executor=executor)
+@ct.electron(executor=executor_instance.executor)
 def join_words(a, b):
     return ", ".join([a, b])
 

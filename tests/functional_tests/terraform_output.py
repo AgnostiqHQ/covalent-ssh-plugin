@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 
 TERRAFORM_OUTPUTS = {}
 
@@ -21,7 +22,7 @@ except Exception as e:
     pass
 
 
-def get_terraform_value(key: str, default):
+def get(key: str, default):
     try:
         return TERRAFORM_OUTPUTS[key]["value"]
     except KeyError:
