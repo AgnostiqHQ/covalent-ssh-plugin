@@ -1,3 +1,5 @@
+import sys
+
 import covalent as ct
 import executor_instance
 from numpy.random import permutation
@@ -38,4 +40,11 @@ def run_experiment(C=1.0, gamma=0.7):
 dispatchable_func = ct.dispatch(run_experiment)
 
 dispatch_id = dispatchable_func(C=1.0, gamma=0.7)
-result = ct.get_result(dispatch_id)
+result = ct.get_result(dispatch_id=dispatch_id, wait=True)
+status = str(result.status)
+
+print(result)
+
+if status == str(ct.status.FAILED):
+    print("Basic Workflow failed to run.")
+    sys.exit(1)
