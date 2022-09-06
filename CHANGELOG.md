@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+## [0.11.0] - 2022-09-06
+
 ### Changed
 
 - Changed python_path arg to conda_env in executor init for functional tests
