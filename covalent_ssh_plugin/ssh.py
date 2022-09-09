@@ -31,8 +31,8 @@ import asyncssh
 import cloudpickle as pickle
 from covalent._results_manager.result import Result
 from covalent._shared_files import logger
-from covalent._shared_files.config import get_config, update_config
-from covalent.executor.base import BaseAsyncExecutor
+from covalent._shared_files.config import get_config
+from covalent.executor.executor_plugins.remote_executor import RemoteExecutor
 
 executor_plugin_name = "SSHExecutor"
 
@@ -42,7 +42,7 @@ log_stack_info = logger.log_stack_info
 _EXECUTOR_PLUGIN_DEFAULTS = {
     "username": "",
     "hostname": "",
-    "ssh_key_file": os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
+    "credentials_file": os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
     "cache_dir": str(Path(get_config("dispatcher.cache_dir")).expanduser().resolve()),
     "remote_cache_dir": ".cache/covalent",
     "python_path": "python",
@@ -51,14 +51,14 @@ _EXECUTOR_PLUGIN_DEFAULTS = {
 }
 
 
-class SSHExecutor(BaseAsyncExecutor):
+class SSHExecutor(RemoteExecutor):
     """
     Async executor class that invokes the input function on a remote server.
 
     Args:
         username: Username used to authenticate over SSH.
         hostname: Address or hostname of the remote server.
-        ssh_key_file: Filename of the private key used for authentication with the remote server.
+        credentials_file: Filename of the private key used for authentication with the remote server.
         cache_dir: Local cache directory used by this executor for temporary files.
         remote_cache_dir: Remote server cache directory used for temporary files.
         python_path: The path to the Python 3 executable on the remote server.
@@ -71,17 +71,18 @@ class SSHExecutor(BaseAsyncExecutor):
         self,
         username: str,
         hostname: str,
-        ssh_key_file: str,
+        credentials_file: str,
         cache_dir: str = None,
         python_path: str = "",
         conda_env: str = None,
         remote_cache_dir: str = "",
         run_local_on_ssh_fail: bool = False,
         do_cleanup: bool = True,
-        **kwargs,
     ) -> None:
 
-        super().__init__(**kwargs)
+        credentials_file = credentials_file or get_config("executors.ssh.credentials_file")
+        self.credentials_file = str(Path(credentials_file).expanduser().resolve())
+        super().__init__(credentials_file=credentials_file)
 
         self.username = username or get_config("executors.ssh.username")
         self.hostname = hostname or get_config("executors.ssh.hostname")
@@ -90,9 +91,6 @@ class SSHExecutor(BaseAsyncExecutor):
         )
         self.python_path = python_path or get_config("executors.ssh.python_path") or "python"
         self.conda_env = conda_env or get_config("executors.ssh.conda_env")
-
-        ssh_key_file = ssh_key_file or get_config("executors.ssh.ssh_key_file")
-        self.ssh_key_file = str(Path(ssh_key_file).expanduser().resolve())
 
         self.cache_dir = cache_dir or get_config("dispatcher.cache_dir")
         self.cache_dir = str(Path(self.cache_dir).expanduser().resolve())
@@ -215,12 +213,12 @@ class SSHExecutor(BaseAsyncExecutor):
 
         ssh_success = False
         conn = None
-        if os.path.exists(self.ssh_key_file):
+        if os.path.exists(self.credentials_file):
             try:
                 conn = await asyncssh.connect(
                     self.hostname,
                     username=self.username,
-                    client_keys=[self.ssh_key_file],
+                    client_keys=[self.credentials_file],
                     known_hosts=None,
                 )
 
@@ -229,7 +227,7 @@ class SSHExecutor(BaseAsyncExecutor):
                 app_log.error(e)
 
         else:
-            message = f"no SSH key file found at {self.ssh_key_file}. Cannot connect to host."
+            message = f"no SSH key file found at {self.credentials_file}. Cannot connect to host."
             app_log.error(message)
 
         return ssh_success, conn
@@ -282,6 +280,60 @@ class SSHExecutor(BaseAsyncExecutor):
         await conn.run(f"rm {remote_script_file}")
         await conn.run(f"rm {remote_result_file}")
 
+    async def _validate_credentials(self) -> bool:
+
+        cred_path = Path(self.credentials_file)
+        if not cred_path.is_file():
+            raise RuntimeError(f"SSH key file {self.credentials_file} does not exist.")
+        
+        return True
+
+    async def _upload_task(
+        self,
+        conn,
+        function_file: str,
+        remote_function_file: str,
+        script_file: str,
+        remote_script_file: str
+        ) -> None:
+        
+        await asyncssh.scp(function_file, (conn, remote_function_file))
+        await asyncssh.scp(script_file, (conn, remote_script_file))
+    
+    async def submit_task(self, conn, remote_script_file: str) -> Any:
+        
+        # Run the function:
+        cmd = f"{self.python_path} {remote_script_file}"
+
+        if self.conda_env:
+            cmd = f'eval "$(conda shell.bash hook)" && conda activate {self.conda_env} && {cmd}'
+
+        app_log.debug(f"Running the function on remote now with command: {cmd}")
+        result = await conn.run(cmd)
+        app_log.debug("Function run finished")
+
+        return result
+
+    async def get_status(self, conn, remote_result_file: str) -> Any:
+
+        cmd = f"ls {remote_result_file}"
+        check_result_file = await conn.run(cmd)
+        client_out = check_result_file.stdout
+
+        return client_out.strip() != remote_result_file
+    
+    async def _query_result(self, conn, result_file: str, remote_result_file: str):
+
+        app_log.debug(f"Copying result file from remote machine to local path {result_file}...")
+        await asyncssh.scp((conn, remote_result_file), result_file)
+
+        # Load the result file:
+        app_log.debug("Loading result file")
+        with open(result_file, "rb") as f_in:
+            result, exception = pickle.load(f_in)
+        
+        return result, exception
+
     async def run(
         self, function: Callable, args: list, kwargs: dict, task_metadata: Dict
     ) -> Coroutine:
@@ -303,6 +355,8 @@ class SSHExecutor(BaseAsyncExecutor):
         operation_id = f"{dispatch_id}_{node_id}"
 
         exception = None
+
+        await self._validate_credentials()
 
         ssh_success, conn = await self._client_connect()
 
@@ -338,7 +392,6 @@ class SSHExecutor(BaseAsyncExecutor):
         cmd = f"mkdir -p {self.remote_cache_dir}"
 
         mkdir_cache = await conn.run(cmd)
-        client_out = mkdir_cache.stdout
         if client_err := mkdir_cache.stderr:
             app_log.warning(client_err)
 
@@ -352,49 +405,23 @@ class SSHExecutor(BaseAsyncExecutor):
         ) = self._write_function_files(operation_id, function, args, kwargs)
 
         app_log.debug("Copying function file to remote machine...")
-
-        await asyncssh.scp(function_file, (conn, remote_function_file))
-        await asyncssh.scp(script_file, (conn, remote_script_file))
+        await self._upload_task(conn, function_file, remote_function_file, script_file, remote_script_file)
 
         app_log.debug("Running function file in remote machine...")
-
-        # Run the function:
-        cmd = f"{self.python_path} {remote_script_file}"
-
-        if self.conda_env:
-            cmd = f'eval "$(conda shell.bash hook)" && conda activate {self.conda_env} && {cmd}'
-
-        app_log.debug(f"Running the function on remote now with command: {cmd}")
-        result = await conn.run(cmd)
-        app_log.debug("Function run finished")
+        result = await self.submit_task(conn, remote_script_file)
 
         if result_err := result.stderr.strip():
             app_log.warning(result_err)
             return self._on_ssh_fail(function, args, kwargs, result_err)
 
-        app_log.debug("Checking that result file was produced in remote machine...")
-
-        # Check that a result file was produced:
-        app_log.debug("Checking result file was produced")
-        cmd = f"ls {remote_result_file}"
-        check_result_file = await conn.run(cmd)
-        client_out = check_result_file.stdout
-        if client_out.strip() != remote_result_file:
-            message = (
-                f"Result file {remote_result_file} on remote host {self.hostname} was not found"
-            )
+        app_log.debug("Checking that result file was produced on remote machine...")
+        if await self.get_status(conn, remote_result_file):
+            message = f"Result file {remote_result_file} on remote host {self.hostname} was not found"
             return self._on_ssh_fail(function, args, kwargs, message)
 
         # scp the pickled result to the local machine here:
         result_file = os.path.join(self.cache_dir, f"result_{operation_id}.pkl")
-
-        app_log.debug(f"Copying result file from remote machine to local path {result_file}...")
-        await asyncssh.scp((conn, remote_result_file), result_file)
-
-        # Load the result file:
-        app_log.debug("Loading result file")
-        with open(result_file, "rb") as f_in:
-            result, exception = pickle.load(f_in)
+        result, exception = await self._query_result(conn, result_file, remote_result_file)
 
         if self.do_cleanup:
             app_log.debug("Performing cleanup on local and remote")
