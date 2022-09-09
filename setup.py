@@ -49,7 +49,7 @@ setup_info = {
     "include_package_data": True,
     "install_requires": [
         "asyncssh>=2.10.1",
-        "git+https://github.com/AgnostiqHQ/covalent.git@develop#egg=covalent",
+        "covalent @ git+https://github.com/AgnostiqHQ/covalent.git@develop#egg=covalent",
     ],
     "classifiers": [
         "Development Status :: 4 - Beta",
