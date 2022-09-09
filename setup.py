@@ -47,7 +47,10 @@ setup_info = {
     "long_description": open("README.md").read(),
     "long_description_content_type": "text/markdown",
     "include_package_data": True,
-    "install_requires": required,
+    "install_requires": [
+        "asyncssh>=2.10.1",
+        "git+https://github.com/AgnostiqHQ/covalent.git@develop#egg=covalent",
+    ],
     "classifiers": [
         "Development Status :: 4 - Beta",
         "Environment :: Console",
