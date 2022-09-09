@@ -285,7 +285,7 @@ class SSHExecutor(RemoteExecutor):
         cred_path = Path(self.credentials_file)
         if not cred_path.is_file():
             raise RuntimeError(f"SSH key file {self.credentials_file} does not exist.")
-        
+
         return True
 
     async def _upload_task(
@@ -296,12 +296,12 @@ class SSHExecutor(RemoteExecutor):
         script_file: str,
         remote_script_file: str
         ) -> None:
-        
+
         await asyncssh.scp(function_file, (conn, remote_function_file))
         await asyncssh.scp(script_file, (conn, remote_script_file))
-    
+
     async def submit_task(self, conn, remote_script_file: str) -> Any:
-        
+
         # Run the function:
         cmd = f"{self.python_path} {remote_script_file}"
 
@@ -321,7 +321,7 @@ class SSHExecutor(RemoteExecutor):
         client_out = check_result_file.stdout
 
         return client_out.strip() != remote_result_file
-    
+
     async def _query_result(self, conn, result_file: str, remote_result_file: str):
 
         app_log.debug(f"Copying result file from remote machine to local path {result_file}...")
@@ -331,7 +331,7 @@ class SSHExecutor(RemoteExecutor):
         app_log.debug("Loading result file")
         with open(result_file, "rb") as f_in:
             result, exception = pickle.load(f_in)
-        
+
         return result, exception
 
     async def run(
