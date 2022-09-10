@@ -71,7 +71,7 @@ def test_init(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_on_ssh_fail():
+async def test_on_ssh_fail(mocker):
     """Test that the process runs locally upon connection errors."""
 
     executor = SSHExecutor(
@@ -86,6 +86,7 @@ async def test_on_ssh_fail():
 
     executor.node_id = (0,)
     executor.dispatch_id = (0,)
+    mocker.patch("covalent_ssh_plugin.SSHExecutor._validate_credentials", return_value=True)
     result = await executor.run(
         function=simple_task,
         args=[5],
