@@ -294,8 +294,8 @@ class SSHExecutor(RemoteExecutor):
         function_file: str,
         remote_function_file: str,
         script_file: str,
-        remote_script_file: str
-        ) -> None:
+        remote_script_file: str,
+    ) -> None:
 
         await asyncssh.scp(function_file, (conn, remote_function_file))
         await asyncssh.scp(script_file, (conn, remote_script_file))
@@ -405,7 +405,9 @@ class SSHExecutor(RemoteExecutor):
         ) = self._write_function_files(operation_id, function, args, kwargs)
 
         app_log.debug("Copying function file to remote machine...")
-        await self._upload_task(conn, function_file, remote_function_file, script_file, remote_script_file)
+        await self._upload_task(
+            conn, function_file, remote_function_file, script_file, remote_script_file
+        )
 
         app_log.debug("Running function file in remote machine...")
         result = await self.submit_task(conn, remote_script_file)
@@ -416,7 +418,9 @@ class SSHExecutor(RemoteExecutor):
 
         app_log.debug("Checking that result file was produced on remote machine...")
         if await self.get_status(conn, remote_result_file):
-            message = f"Result file {remote_result_file} on remote host {self.hostname} was not found"
+            message = (
+                f"Result file {remote_result_file} on remote host {self.hostname} was not found"
+            )
             return self._on_ssh_fail(function, args, kwargs, message)
 
         # scp the pickled result to the local machine here:
