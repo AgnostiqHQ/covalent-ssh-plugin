@@ -37,7 +37,7 @@ def test_init(tmp_path):
 
     cache_dir = tmp_path / "cache_dir"
 
-    _config_data = {
+    config_data = {
         "dispatcher.cache_dir": str(cache_dir),
         "executors.ssh.user": "centos",
         "executors.ssh.hostname": "12.12.12.12",
@@ -48,11 +48,11 @@ def test_init(tmp_path):
     }
 
     def get_config_mock(key):
-        return _config_data[key]
+        return config_data[key]
 
-    with patch("covalent._shared_files.config._config_manager") as _config_manager_mock:
-        _config_manager_mock.config_data = _config_data
-        _config_manager_mock.get.side_effect = get_config_mock
+    with patch("covalent._shared_files.config.ConfigManager") as config_manager_mock:
+        config_manager_mock.config_data = config_data
+        config_manager_mock.get.side_effect = get_config_mock
 
         executor = SSHExecutor(
             username="user",
@@ -63,9 +63,9 @@ def test_init(tmp_path):
         assert executor.username == "user"
         assert executor.hostname == "host"
         assert executor.credentials_file == str(key_path)
-        assert executor.cache_dir == _config_data["dispatcher.cache_dir"]
-        assert executor.remote_cache == _config_data["executors.ssh.remote_cache"]
-        assert executor.python_path == _config_data["executors.ssh.python_path"]
+        assert executor.cache_dir == config_data["dispatcher.cache_dir"]
+        assert executor.remote_cache == config_data["executors.ssh.remote_cache"]
+        assert executor.python_path == config_data["executors.ssh.python_path"]
         assert executor.run_local_on_ssh_fail is False
         assert executor.do_cleanup is True
 
