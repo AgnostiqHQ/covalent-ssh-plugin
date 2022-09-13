@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+## [0.12.0] - 2022-09-13
+
 ### Changed
 
 - Using covalent on `develop` rather than the stable version
