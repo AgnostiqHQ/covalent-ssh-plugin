@@ -29,7 +29,7 @@ import pytest
 from covalent_ssh_plugin import SSHExecutor
 
 
-def test_init(tmp_path):
+def test_init(mocker, tmp_path):
     """Test that initialization properly sets member variables."""
 
     key_path = tmp_path / "key_file"
@@ -50,24 +50,21 @@ def test_init(tmp_path):
     def get_config_mock(key):
         return config_data[key]
 
-    with patch("covalent._shared_files.config.ConfigManager") as config_manager_mock:
-        config_manager_mock.config_data = config_data
-        config_manager_mock.get.side_effect = get_config_mock
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
 
-        executor = SSHExecutor(
-            username="user",
-            hostname="host",
-            credentials_file=str(key_path),
-        )
+    executor = SSHExecutor(
+        username="user",
+        hostname="host",
+        credentials_file=str(key_path),
+    )
 
-        assert executor.username == "user"
-        assert executor.hostname == "host"
-        assert executor.credentials_file == str(key_path)
-        assert executor.cache_dir == config_data["dispatcher.cache_dir"]
-        assert executor.remote_cache == config_data["executors.ssh.remote_cache"]
-        assert executor.python_path == config_data["executors.ssh.python_path"]
-        assert executor.run_local_on_ssh_fail is False
-        assert executor.do_cleanup is True
+    assert executor.username == "user"
+    assert executor.hostname == "host"
+    assert executor.credentials_file == str(key_path)
+    assert executor.remote_cache == config_data["executors.ssh.remote_cache"]
+    assert executor.python_path == config_data["executors.ssh.python_path"]
+    assert executor.run_local_on_ssh_fail is False
+    assert executor.do_cleanup is True
 
 
 @pytest.mark.asyncio
