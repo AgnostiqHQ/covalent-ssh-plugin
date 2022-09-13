@@ -28,27 +28,26 @@ import pytest
 
 from covalent_ssh_plugin import SSHExecutor
 
+config_data = {
+    "dispatcher.cache_dir": "cache_dir",
+    "executors.ssh.user": "centos",
+    "executors.ssh.hostname": "12.12.12.12",
+    "executors.ssh.credentials_file": "~/.ssh/id_rsa",
+    "executors.ssh.remote_cache": "/home/centos",
+    "executors.ssh.python_path": "python3.8",
+    "executors.ssh.conda_env": "py-3.8",
+}
+
+
+def get_config_mock(key):
+    return config_data[key]
+
 
 def test_init(mocker, tmp_path):
     """Test that initialization properly sets member variables."""
 
     key_path = tmp_path / "key_file"
     key_path.touch()
-
-    cache_dir = tmp_path / "cache_dir"
-
-    config_data = {
-        "dispatcher.cache_dir": str(cache_dir),
-        "executors.ssh.user": "centos",
-        "executors.ssh.hostname": "12.12.12.12",
-        "executors.ssh.credentials_file": "~/.ssh/id_rsa",
-        "executors.ssh.remote_cache": "/home/centos",
-        "executors.ssh.python_path": "python3.8",
-        "executors.ssh.conda_env": "py-3.8",
-    }
-
-    def get_config_mock(key):
-        return config_data[key]
 
     mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
 
@@ -70,6 +69,8 @@ def test_init(mocker, tmp_path):
 @pytest.mark.asyncio
 async def test_on_ssh_fail(mocker):
     """Test that the process runs locally upon connection errors."""
+
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
 
     executor = SSHExecutor(
         username="user",
@@ -106,6 +107,8 @@ async def test_on_ssh_fail(mocker):
 async def test_client_connect(mocker):
     """Test that connection will fail if credentials are not supplied."""
 
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
+
     executor = SSHExecutor(
         username="user",
         hostname="host",
@@ -128,8 +131,10 @@ async def test_client_connect(mocker):
     assert connected is True
 
 
-def test_file_writes():
+def test_file_writes(mocker):
     """Test that files get written to the correct locations."""
+
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
 
     executor = SSHExecutor(
         username="user",
