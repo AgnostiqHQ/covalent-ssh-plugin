@@ -1,2 +1,2 @@
 asyncssh>=2.10.1
-git+https://github.com/AgnostiqHQ/covalent.git@develop#egg=covalent
+covalent==0.177.0.post1.dev0
