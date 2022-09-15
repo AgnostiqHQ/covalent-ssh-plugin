@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+
+### Changed
+
+- Updated requirements.txt to pin covalent to version 0.177.0.post1.dev0
+
 ### Tests
 
 - Fixed config manager related test which broke as a result of changes in covalent
