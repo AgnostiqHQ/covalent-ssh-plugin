@@ -361,7 +361,7 @@ class SSHExecutor(RemoteExecutor):
         check_result_file = await conn.run(cmd)
         client_out = check_result_file.stdout
 
-        return client_out.strip() != remote_result_file
+        return client_out.strip() == remote_result_file
 
     async def _poll_task(
         self, conn: asyncssh.SSHClientConnection, remote_result_file: str, retries: int = 5
