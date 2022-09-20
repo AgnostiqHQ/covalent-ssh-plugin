@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+## [0.14.0] - 2022-09-20
+
 ### Changed
 
 - Renaming `credentials_file` to `ssh_key_file` to not have name conflict with key referring to cloud credential files
