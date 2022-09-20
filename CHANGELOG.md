@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+## [0.13.1] - 2022-09-20
+
 ### Fixed
 
 - Fixed get_status to correctly assert if remote result file exists
