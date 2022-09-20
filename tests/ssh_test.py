@@ -32,7 +32,7 @@ config_data = {
     "dispatcher.cache_dir": "cache_dir",
     "executors.ssh.user": "centos",
     "executors.ssh.hostname": "12.12.12.12",
-    "executors.ssh.credentials_file": "~/.ssh/id_rsa",
+    "executors.ssh.ssh_key_file": "~/.ssh/id_rsa",
     "executors.ssh.remote_cache": "/home/centos",
     "executors.ssh.python_path": "python3.8",
     "executors.ssh.conda_env": "py-3.8",
@@ -54,12 +54,12 @@ def test_init(mocker, tmp_path):
     executor = SSHExecutor(
         username="user",
         hostname="host",
-        credentials_file=str(key_path),
+        ssh_key_file=str(key_path),
     )
 
     assert executor.username == "user"
     assert executor.hostname == "host"
-    assert executor.credentials_file == str(key_path)
+    assert executor.ssh_key_file == str(key_path)
     assert executor.remote_cache == config_data["executors.ssh.remote_cache"]
     assert executor.python_path == config_data["executors.ssh.python_path"]
     assert executor.run_local_on_ssh_fail is False
@@ -75,7 +75,7 @@ async def test_on_ssh_fail(mocker):
     executor = SSHExecutor(
         username="user",
         hostname="host",
-        credentials_file="key_file",
+        ssh_key_file="key_file",
         run_local_on_ssh_fail=True,
     )
 
@@ -112,7 +112,7 @@ async def test_client_connect(mocker):
     executor = SSHExecutor(
         username="user",
         hostname="host",
-        credentials_file="non-existant_key",
+        ssh_key_file="non-existant_key",
     )
 
     connected, _ = await executor._client_connect()
@@ -139,7 +139,7 @@ def test_file_writes(mocker):
     executor = SSHExecutor(
         username="user",
         hostname="host",
-        credentials_file="key_file",
+        ssh_key_file="key_file",
     )
 
     def simple_task(x):
