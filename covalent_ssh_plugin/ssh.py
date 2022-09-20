@@ -43,7 +43,7 @@ log_stack_info = logger.log_stack_info
 _EXECUTOR_PLUGIN_DEFAULTS = {
     "username": "",
     "hostname": "",
-    "credentials_file": os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
+    "ssh_key_file": os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
     "cache_dir": str(Path(get_config("dispatcher.cache_dir")).expanduser().resolve()),
     "remote_cache": ".cache/covalent",
     "python_path": "python",
@@ -59,7 +59,7 @@ class SSHExecutor(RemoteExecutor):
     Args:
         username: Username used to authenticate over SSH.
         hostname: Address or hostname of the remote server.
-        credentials_file: Filename of the private key used for authentication with the remote server.
+        ssh_key_file: Filename of the private key used for authentication with the remote server.
         cache_dir: Local cache directory used by this executor for temporary files.
         remote_cache: Remote server cache directory used for temporary files.
         python_path: The path to the Python 3 executable on the remote server.
@@ -73,7 +73,7 @@ class SSHExecutor(RemoteExecutor):
         self,
         username: str,
         hostname: str,
-        credentials_file: str,
+        ssh_key_file: str = None,
         cache_dir: str = None,
         python_path: str = "",
         conda_env: str = None,
@@ -83,15 +83,11 @@ class SSHExecutor(RemoteExecutor):
         do_cleanup: bool = True,
     ) -> None:
 
-        credentials_file = credentials_file or get_config("executors.ssh.credentials_file")
-        credentials_file = str(Path(credentials_file).expanduser().resolve())
         remote_cache = (
             remote_cache or get_config("executors.ssh.remote_cache") or ".cache/covalent"
         )
 
-        super().__init__(
-            credentials_file=credentials_file, poll_freq=poll_freq, remote_cache=remote_cache
-        )
+        super().__init__(poll_freq=poll_freq, remote_cache=remote_cache)
 
         self.username = username or get_config("executors.ssh.username")
         self.hostname = hostname or get_config("executors.ssh.hostname")
@@ -104,6 +100,9 @@ class SSHExecutor(RemoteExecutor):
 
         self.run_local_on_ssh_fail = run_local_on_ssh_fail
         self.do_cleanup = do_cleanup
+
+        ssh_key_file = ssh_key_file or get_config("executors.ssh.ssh_key_file")
+        self.ssh_key_file = str(Path(ssh_key_file).expanduser().resolve())
 
     def _write_function_files(
         self,
@@ -220,12 +219,12 @@ class SSHExecutor(RemoteExecutor):
 
         ssh_success = False
         conn = None
-        if os.path.exists(self.credentials_file):
+        if os.path.exists(self.ssh_key_file):
             try:
                 conn = await asyncssh.connect(
                     self.hostname,
                     username=self.username,
-                    client_keys=[self.credentials_file],
+                    client_keys=[self.ssh_key_file],
                     known_hosts=None,
                 )
 
@@ -234,7 +233,7 @@ class SSHExecutor(RemoteExecutor):
                 app_log.error(e)
 
         else:
-            message = f"no SSH key file found at {self.credentials_file}. Cannot connect to host."
+            message = f"no SSH key file found at {self.ssh_key_file}. Cannot connect to host."
             app_log.error(message)
 
         return ssh_success, conn
@@ -286,9 +285,9 @@ class SSHExecutor(RemoteExecutor):
             RuntimeError: If the file does not exist
         """
 
-        cred_path = Path(self.credentials_file)
+        cred_path = Path(self.ssh_key_file)
         if not cred_path.is_file():
-            raise RuntimeError(f"SSH key file {self.credentials_file} does not exist.")
+            raise RuntimeError(f"SSH key file {self.ssh_key_file} does not exist.")
 
         return True
 
