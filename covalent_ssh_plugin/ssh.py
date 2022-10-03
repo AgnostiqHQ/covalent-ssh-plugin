@@ -459,6 +459,8 @@ class SSHExecutor(RemoteExecutor):
         node_id = task_metadata["node_id"]
         operation_id = f"{dispatch_id}_{node_id}"
 
+        status_store = task_metadata["status_store"]
+
         exception = None
 
         await self._validate_credentials()
