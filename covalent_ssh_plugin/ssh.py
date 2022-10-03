@@ -33,6 +33,7 @@ import cloudpickle as pickle
 from covalent._results_manager import Result
 from covalent._shared_files import logger
 from covalent._shared_files.config import get_config
+from covalent._shared_files.statuses import RunningCategory
 from covalent.executor.executor_plugins.remote_executor import RemoteExecutor
 
 executor_plugin_name = "SSHExecutor"
@@ -50,6 +51,24 @@ _EXECUTOR_PLUGIN_DEFAULTS = {
     "run_local_on_ssh_fail": False,
     "conda_env": "",
 }
+
+
+class RegisteringStatus(RunningCategory):
+    executor_name = "SSHExecutor"
+    status_name = "REGISTERING"
+    description = "Connection established to the remote machine and files are being transferred"
+
+
+class RunningStatus(RunningCategory):
+    executor_name = "SSHExecutor"
+    status_name = "RUNNING"
+    description = "Execution invoked on the remote machine"
+
+
+class CompletingStatus(RunningCategory):
+    executor_name = "SSHExecutor"
+    status_name = "COMPLETING"
+    description = "Results files are being retrieved, temporary files are being deleted, and the connection is being closed"
 
 
 class SSHExecutor(RemoteExecutor):
