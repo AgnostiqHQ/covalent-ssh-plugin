@@ -28,51 +28,49 @@ import pytest
 
 from covalent_ssh_plugin import SSHExecutor
 
+config_data = {
+    "dispatcher.cache_dir": "cache_dir",
+    "executors.ssh.user": "centos",
+    "executors.ssh.hostname": "12.12.12.12",
+    "executors.ssh.ssh_key_file": "~/.ssh/id_rsa",
+    "executors.ssh.remote_cache": "/home/centos",
+    "executors.ssh.python_path": "python3.8",
+    "executors.ssh.conda_env": "py-3.8",
+}
 
-def test_init(tmp_path):
+
+def get_config_mock(key):
+    return config_data[key]
+
+
+def test_init(mocker, tmp_path):
     """Test that initialization properly sets member variables."""
 
     key_path = tmp_path / "key_file"
     key_path.touch()
 
-    cache_dir = tmp_path / "cache_dir"
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
 
-    _config_data = {
-        "dispatcher.cache_dir": str(cache_dir),
-        "executors.ssh.user": "centos",
-        "executors.ssh.hostname": "12.12.12.12",
-        "executors.ssh.ssh_key_file": "~/.ssh/id_rsa",
-        "executors.ssh.remote_cache_dir": "/home/centos",
-        "executors.ssh.python_path": "python3.8",
-        "executors.ssh.conda_env": "py-3.8",
-    }
+    executor = SSHExecutor(
+        username="user",
+        hostname="host",
+        ssh_key_file=str(key_path),
+    )
 
-    def get_config_mock(key):
-        return _config_data[key]
-
-    with patch("covalent._shared_files.config._config_manager") as _config_manager_mock:
-        _config_manager_mock.config_data = _config_data
-        _config_manager_mock.get.side_effect = get_config_mock
-
-        executor = SSHExecutor(
-            username="user",
-            hostname="host",
-            ssh_key_file=str(key_path),
-        )
-
-        assert executor.username == "user"
-        assert executor.hostname == "host"
-        assert executor.ssh_key_file == str(key_path)
-        assert executor.cache_dir == _config_data["dispatcher.cache_dir"]
-        assert executor.remote_cache_dir == _config_data["executors.ssh.remote_cache_dir"]
-        assert executor.python_path == _config_data["executors.ssh.python_path"]
-        assert executor.run_local_on_ssh_fail is False
-        assert executor.do_cleanup is True
+    assert executor.username == "user"
+    assert executor.hostname == "host"
+    assert executor.ssh_key_file == str(key_path)
+    assert executor.remote_cache == config_data["executors.ssh.remote_cache"]
+    assert executor.python_path == config_data["executors.ssh.python_path"]
+    assert executor.run_local_on_ssh_fail is False
+    assert executor.do_cleanup is True
 
 
 @pytest.mark.asyncio
-async def test_on_ssh_fail():
+async def test_on_ssh_fail(mocker):
     """Test that the process runs locally upon connection errors."""
+
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
 
     executor = SSHExecutor(
         username="user",
@@ -86,6 +84,7 @@ async def test_on_ssh_fail():
 
     executor.node_id = (0,)
     executor.dispatch_id = (0,)
+    mocker.patch("covalent_ssh_plugin.SSHExecutor._validate_credentials", return_value=True)
     result = await executor.run(
         function=simple_task,
         args=[5],
@@ -107,6 +106,8 @@ async def test_on_ssh_fail():
 @pytest.mark.asyncio
 async def test_client_connect(mocker):
     """Test that connection will fail if credentials are not supplied."""
+
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
 
     executor = SSHExecutor(
         username="user",
@@ -130,8 +131,10 @@ async def test_client_connect(mocker):
     assert connected is True
 
 
-def test_file_writes():
+def test_file_writes(mocker):
     """Test that files get written to the correct locations."""
+
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
 
     executor = SSHExecutor(
         username="user",
@@ -162,11 +165,9 @@ def test_file_writes():
     ) = write_files()
 
     assert script_file == os.path.join(executor.cache_dir, f"exec_{operation_id}.py")
-    assert remote_script_file == os.path.join(executor.remote_cache_dir, f"exec_{operation_id}.py")
+    assert remote_script_file == os.path.join(executor.remote_cache, f"exec_{operation_id}.py")
     assert function_file == os.path.join(executor.cache_dir, f"function_{operation_id}.pkl")
     assert remote_function_file == os.path.join(
-        executor.remote_cache_dir, f"function_{operation_id}.pkl"
+        executor.remote_cache, f"function_{operation_id}.pkl"
     )
-    assert remote_result_file == os.path.join(
-        executor.remote_cache_dir, f"result_{operation_id}.pkl"
-    )
+    assert remote_result_file == os.path.join(executor.remote_cache, f"result_{operation_id}.pkl")

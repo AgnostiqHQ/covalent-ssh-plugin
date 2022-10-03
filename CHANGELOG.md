@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+### Operations
+
+- Added license workflow
+
+## [0.14.0] - 2022-09-20
+
+### Changed
+
+- Renaming `credentials_file` to `ssh_key_file` to not have name conflict with key referring to cloud credential files
+
+## [0.13.1] - 2022-09-20
+
+### Fixed
+
+- Fixed get_status to correctly assert if remote result file exists
+
+## [0.13.0] - 2022-09-15
+
+
+### Changed
+
+- Updated requirements.txt to pin covalent to version 0.177.0.post1.dev0
+
+### Tests
+
+- Fixed config manager related test which broke as a result of changes in covalent
+
+## [0.12.0] - 2022-09-13
+
+### Changed
+
+- Using covalent on `develop` rather than the stable version
+- Using `RemoteExecutor` now instead of `BaseAsyncExecutor`
+- Renamed `ssh_key_file` to `credentials_file` which is passed to the super class instead
+
+### Added
+
+- Implementation of abstract functions added to adhere to the `RemoteExecutor`'s template
+
+## [0.11.0] - 2022-09-06
+
+### Changed
+
+- Changed python_path arg to conda_env in executor init for functional tests
+
 ## [0.10.0] - 2022-08-31
 
 ### Added
@@ -24,6 +69,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enabled Codecov
 
 ## [0.8.0] - 2022-08-22
+
+### Added
+
+- Added basic functional test for CI
 
 ### Added
 

@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import traceback
 
 TERRAFORM_OUTPUTS = {}
 
@@ -18,8 +19,11 @@ try:
         capture_output=True,
     )
     TERRAFORM_OUTPUTS = json.loads(proc.stdout.decode())
-except Exception as e:
-    pass
+except Exception:
+    traceback.print_exc()
+
+print("Terraform output:")
+print(TERRAFORM_OUTPUTS)
 
 
 def get(key: str, default):
