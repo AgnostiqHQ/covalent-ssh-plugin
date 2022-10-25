@@ -123,7 +123,7 @@ jobs:
             git config user.name "CovalentOpsBot"
             git config user.email "covalentopsbot@users.noreply.github.com"
             git remote set-url origin https://${{ secrets.COVALENT_OPS_BOT_TOKEN }}@github.com/AgnostiqHQ/covalent-ssh-plugin.git
-            git push origin HEAD:main
+            git push origin HEAD:main --force
             release=true
           fi
           echo "RELEASE=$release" >> $GITHUB_ENV
