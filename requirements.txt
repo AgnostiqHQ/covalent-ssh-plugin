@@ -1,2 +1,2 @@
 asyncssh>=2.10.1
-covalent==0.177.0.post1.dev0
+covalent>=0.202.0

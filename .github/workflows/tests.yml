@@ -62,11 +62,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install --no-cache-dir -r ./requirements.txt
           pip install --no-cache-dir -r ./tests/requirements.txt
-
-      - name: Install Covalent
-        run: pip install covalent --pre
 
       - name: Build SSH plugin
         run: python setup.py sdist
@@ -85,7 +81,7 @@ jobs:
           pip install ./dist/covalent-ssh-plugin-${VERSION}.tar.gz
 
       - name: Start Covalent
-        run: covalent start --ignore-migrations
+        run: covalent db migrate && covalent start -d
 
       - name: Test plugin loading
         run: from covalent.executor import SSHExecutor
