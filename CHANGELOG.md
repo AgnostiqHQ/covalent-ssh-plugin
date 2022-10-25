@@ -10,7 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Operations
 
 - Fix errors in `license.yml`
-- Pre-commit autoupdate. (merging changes in main)
 
 ## [0.15.0] - 2022-10-25
 
