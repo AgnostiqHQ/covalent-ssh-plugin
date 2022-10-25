@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Updating pre-commit hooks version number.
 - Added license workflow
+- Pre-commit autoupdate.
 
 ## [0.14.0] - 2022-09-20
 
