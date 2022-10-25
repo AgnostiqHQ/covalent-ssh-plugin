@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Pinned covalent to version 0.202.0
+- Updated covalent version to `>=0.202.0`
+- Removed redundant install steps from workflow
 
 ### Operations
 

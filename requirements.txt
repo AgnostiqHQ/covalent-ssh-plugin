@@ -1,2 +1,2 @@
 asyncssh>=2.10.1
-covalent==0.202.0
+covalent>=0.202.0
