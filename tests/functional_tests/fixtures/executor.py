@@ -4,7 +4,7 @@ load_dotenv()
 
 import os
 
-import covalent as ct
+from covalent_ssh_plugin import SSHExecutor
 
 executor_config = {
     "username": os.getenv("executor_username", "ubuntu"),
@@ -13,7 +13,7 @@ executor_config = {
     "conda_env": os.getenv("executor_conda_env", "covalent"),
 }
 
-print("Using Executor Config:")
+print("Using Executor Configuration:")
 print(executor_config)
 
-executor = ct.executor.SSHExecutor(**executor_config)
+executor = SSHExecutor(**executor_config)
