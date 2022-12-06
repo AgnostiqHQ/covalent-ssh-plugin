@@ -3,8 +3,6 @@ import pytest
 from numpy.random import permutation
 from sklearn import datasets, svm
 
-from tests.functional_tests.fixtures.executor import executor
-
 deps_pip = ct.DepsPip(packages=["numpy==1.23.2", "scikit-learn==1.1.2"])
 
 
@@ -18,7 +16,7 @@ def test_svm_workflow():
         iris.target = iris.target[perm]
         return iris.data, iris.target
 
-    @ct.electron(executor=executor, deps_pip=deps_pip)
+    @ct.electron(executor="ssh", deps_pip=deps_pip)
     def train_svm(data, C, gamma):
         X, y = data
         clf = svm.SVC(C=C, gamma=gamma)
