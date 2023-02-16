@@ -500,7 +500,8 @@ class SSHExecutor(RemoteExecutor):
 
         if result_err := result.stderr.strip():
             app_log.warning(result_err)
-            return self._on_ssh_fail(function, args, kwargs, result_err)
+            if result.returncode != 0:
+                return self._on_ssh_fail(function, args, kwargs, result_err)
 
         if not await self._poll_task(conn, remote_result_file):
             message = (
