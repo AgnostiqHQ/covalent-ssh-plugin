@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+### Changed
+
+- Check `result.returncode != 0` inside `run` method before deferring to `_on_ssh_fail`.
+
 ## [0.20.0] - 2022-12-15
 
 ### Changed
