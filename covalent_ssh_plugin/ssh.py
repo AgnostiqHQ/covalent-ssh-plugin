@@ -49,7 +49,7 @@ _EXECUTOR_PLUGIN_DEFAULTS = {
     "conda_env": "",
     "remote_cache": ".cache/covalent",
     "run_local_on_ssh_fail": False,
-    "workdir": ".cache/covalent/workdir",
+    "remote_workdir": ".cache/covalent/remote_workdir",
     "create_unique_workdir": False,
 }
 
@@ -68,7 +68,7 @@ class SSHExecutor(RemoteExecutor):
         remote_cache: Remote server cache directory used for temporary files.
         run_local_on_ssh_fail: If True, and the execution fails to run on the remote server,
             then the execution is run on the local machine.
-        workdir: The working directory on the remote server used for storing files produced from workflows.
+        remote_workdir: The working directory on the remote server used for storing files produced from workflows.
         create_unique_workdir: Whether to create unique sub-directories for each node / task / electron.
         poll_freq: Number of seconds to wait for before retrying the result poll
         do_cleanup: Whether to delete all the intermediate files or not
@@ -84,7 +84,7 @@ class SSHExecutor(RemoteExecutor):
         conda_env: str = None,
         remote_cache: str = "",
         run_local_on_ssh_fail: bool = False,
-        workdir: str = "",
+        remote_workdir: str = "",
         create_unique_workdir: Optional[bool] = None,
         poll_freq: int = 15,
         do_cleanup: bool = True,
@@ -107,7 +107,7 @@ class SSHExecutor(RemoteExecutor):
 
         self.run_local_on_ssh_fail = run_local_on_ssh_fail
 
-        self.workdir = workdir or get_config("executors.ssh.workdir")
+        self.remote_workdir = remote_workdir or get_config("executors.ssh.remote_workdir")
         self.create_unique_workdir = create_unique_workdir or get_config("executors.ssh.create_unique_workdir")
 
         self.do_cleanup = do_cleanup
@@ -139,9 +139,9 @@ class SSHExecutor(RemoteExecutor):
         operation_id = f"{dispatch_id}_{node_id}"
 
         if self.create_unique_workdir:
-            current_workdir = os.path.join(self.workdir, dispatch_id, f"node_{node_id}")
+            current_remote_workdir = os.path.join(self.remote_workdir, dispatch_id, f"node_{node_id}")
         else:
-            current_workdir = self.workdir
+            current_remote_workdir = self.remote_workdir
 
         # Pickle and save location of the function and its arguments:
         function_file = os.path.join(self.cache_dir, f"function_{operation_id}.pkl")
@@ -177,9 +177,9 @@ class SSHExecutor(RemoteExecutor):
                 f"with open('{remote_function_file}', 'rb') as f_in:",
                 "    fn, args, kwargs = pickle.load(f_in)",
                 "    try:",
-                f"        Path({current_workdir}).mkdir(parents=True, exist_ok=True)",
+                f"        Path({current_remote_workdir}).mkdir(parents=True, exist_ok=True)",
                 "        current_dir = os.getcwd()",
-                f"        os.chdir({current_workdir})",
+                f"        os.chdir({current_remote_workdir})",
                 "        result = fn(*args, **kwargs)",
                 "    except Exception as e:",
                 "        exception = e",
