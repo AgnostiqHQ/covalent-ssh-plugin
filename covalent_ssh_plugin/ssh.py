@@ -121,33 +121,23 @@ class SSHExecutor(RemoteExecutor):
 
     def _write_function_files(
         self,
-        dispatch_id: str,
-        node_id: str,
+        operation_id: str,
         fn: Callable,
         args: list,
         kwargs: dict,
+        current_remote_workdir: str = ".",
     ) -> None:
         """
         Helper function to pickle the function to be executed to file, and write the
         python script which calls the function.
 
         Args:
-            dispatch_id: dispatch ID.
-            node_id: task ID.
+            operation_id: A concatenation of the dispatch ID and task ID.
             fn: The input python function which will be executed and whose result
                 is ultimately returned by this function.
             args: List of positional arguments to be used by the function.
             kwargs: Dictionary of keyword arguments to be used by the function.
         """
-
-        operation_id = f"{dispatch_id}_{node_id}"
-
-        if self.create_unique_workdir:
-            current_remote_workdir = os.path.join(
-                self.remote_workdir, dispatch_id, f"node_{node_id}"
-            )
-        else:
-            current_remote_workdir = self.remote_workdir
 
         # Pickle and save location of the function and its arguments:
         function_file = os.path.join(self.cache_dir, f"function_{operation_id}.pkl")
@@ -474,6 +464,13 @@ class SSHExecutor(RemoteExecutor):
         node_id = task_metadata["node_id"]
         operation_id = f"{dispatch_id}_{node_id}"
 
+        if self.create_unique_workdir:
+            current_remote_workdir = os.path.join(
+                self.remote_workdir, dispatch_id, f"node_{node_id}"
+            )
+        else:
+            current_remote_workdir = self.remote_workdir
+
         exception = None
 
         await self._validate_credentials()
@@ -522,7 +519,7 @@ class SSHExecutor(RemoteExecutor):
             remote_function_file,
             remote_script_file,
             remote_result_file,
-        ) = self._write_function_files(dispatch_id, node_id, function, args, kwargs)
+        ) = self._write_function_files(operation_id, function, args, kwargs, current_remote_workdir)
 
         app_log.debug("Copying function file to remote machine...")
         await self._upload_task(
