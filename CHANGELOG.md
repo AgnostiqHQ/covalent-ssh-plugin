@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+### Added
+
+- Ability to specify a `workdir` along with `create_unique_workdir` option for each electron / node.
+
 ## [0.20.0] - 2022-12-15
 
 ### Changed
