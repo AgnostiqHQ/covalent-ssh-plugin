@@ -150,7 +150,8 @@ def test_file_writes(mocker):
     @patch("builtins.open", new_callable=mock_open())
     def write_files(mock):
         return executor._write_function_files(
-            operation_id,
+            "dispatchid",
+            "taskid",
             simple_task,
             [5],
             {},
