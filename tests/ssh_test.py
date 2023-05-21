@@ -149,13 +149,15 @@ def test_file_writes(mocker):
     def simple_task(x):
         return x
 
-    operation_id = "dispatchid_taskid"
+    dispatch_id = "dispatchid"
+    task_id = "taskid"
+    operation_id = f"{dispatch_id}_{task_id}"
 
     @patch("builtins.open", new_callable=mock_open())
     def write_files(mock):
         return executor._write_function_files(
-            "dispatchid",
-            "taskid",
+            dispatch_id,
+            task_id,
             simple_task,
             [5],
             {},
