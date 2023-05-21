@@ -49,7 +49,7 @@ _EXECUTOR_PLUGIN_DEFAULTS = {
     "conda_env": "",
     "remote_cache": ".cache/covalent",
     "run_local_on_ssh_fail": False,
-    "remote_workdir": ".cache/covalent/remote_workdir",
+    "remote_workdir": "covalent-workdir",
     "create_unique_workdir": False,
 }
 
@@ -108,7 +108,11 @@ class SSHExecutor(RemoteExecutor):
         self.run_local_on_ssh_fail = run_local_on_ssh_fail
 
         self.remote_workdir = remote_workdir or get_config("executors.ssh.remote_workdir")
-        self.create_unique_workdir = create_unique_workdir or get_config("executors.ssh.create_unique_workdir")
+        self.create_unique_workdir = (
+            get_config("executors.ssh.create_unique_workdir")
+            if create_unique_workdir is None
+            else create_unique_workdir
+        )
 
         self.do_cleanup = do_cleanup
 
@@ -139,7 +143,9 @@ class SSHExecutor(RemoteExecutor):
         operation_id = f"{dispatch_id}_{node_id}"
 
         if self.create_unique_workdir:
-            current_remote_workdir = os.path.join(self.remote_workdir, dispatch_id, f"node_{node_id}")
+            current_remote_workdir = os.path.join(
+                self.remote_workdir, dispatch_id, f"node_{node_id}"
+            )
         else:
             current_remote_workdir = self.remote_workdir
 
