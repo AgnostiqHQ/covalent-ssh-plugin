@@ -36,6 +36,8 @@ config_data = {
     "executors.ssh.remote_cache": "/home/centos",
     "executors.ssh.python_path": "python3.8",
     "executors.ssh.conda_env": "py-3.8",
+    "executors.ssh.remote_workdir": "covalent-workdir",
+    "executors.ssh.create_unique_workdir": False,
 }
 
 
@@ -63,6 +65,8 @@ def test_init(mocker, tmp_path):
     assert executor.remote_cache == config_data["executors.ssh.remote_cache"]
     assert executor.python_path == config_data["executors.ssh.python_path"]
     assert executor.run_local_on_ssh_fail is False
+    assert executor.remote_workdir == config_data["executors.ssh.remote_workdir"]
+    assert executor.create_unique_workdir is False
     assert executor.do_cleanup is True
 
 
