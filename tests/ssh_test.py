@@ -57,6 +57,7 @@ def test_init(mocker, tmp_path):
         username="user",
         hostname="host",
         ssh_key_file=str(key_path),
+        create_unique_workdir=True,
     )
 
     assert executor.username == "user"
@@ -66,7 +67,7 @@ def test_init(mocker, tmp_path):
     assert executor.python_path == config_data["executors.ssh.python_path"]
     assert executor.run_local_on_ssh_fail is False
     assert executor.remote_workdir == config_data["executors.ssh.remote_workdir"]
-    assert executor.create_unique_workdir is False
+    assert executor.create_unique_workdir is True
     assert executor.do_cleanup is True
 
 
