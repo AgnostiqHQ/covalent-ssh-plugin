@@ -519,7 +519,9 @@ class SSHExecutor(RemoteExecutor):
             remote_function_file,
             remote_script_file,
             remote_result_file,
-        ) = self._write_function_files(operation_id, function, args, kwargs, current_remote_workdir)
+        ) = self._write_function_files(
+            operation_id, function, args, kwargs, current_remote_workdir
+        )
 
         app_log.debug("Copying function file to remote machine...")
         await self._upload_task(
