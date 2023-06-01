@@ -22,7 +22,8 @@
 
 
 import os
-from unittest.mock import AsyncMock, mock_open, patch
+import tempfile
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
@@ -117,7 +118,7 @@ async def test_client_connect(mocker):
     executor = SSHExecutor(
         username="user",
         hostname="host",
-        ssh_key_file="non-existant_key",
+        ssh_key_file="non-existent_key",
     )
 
     connected, _ = await executor._client_connect()
@@ -134,6 +135,64 @@ async def test_client_connect(mocker):
     mocker.patch("asyncssh.connect", AsyncMock())
     connected, _ = await executor._client_connect()
     assert connected is True
+
+
+@pytest.mark.asyncio
+async def test_current_remote_workdir(mocker):
+    async def mock_conn_run(x):
+        ret = MagicMock()
+        ret.stdout = "3"
+        ret.stderr = None
+        return ret
+
+    async def mock_wait_closed():
+        return True
+
+    mock_conn = mocker.patch("asyncssh.SSHClientConnection")
+    mock_conn.run.side_effect = mock_conn_run
+    mock_conn.wait_closed.side_effect = mock_wait_closed
+    mocker.patch(
+        "covalent_ssh_plugin.ssh.SSHExecutor._client_connect", return_value=(True, mock_conn)
+    )
+
+    async def mock_submit_task(mock_conn, file):
+        ret = MagicMock()
+        ret.stderr = ""
+        return ret
+
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._validate_credentials", return_value=True)
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._upload_task")
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor.submit_task", side_effect=mock_submit_task)
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._poll_task", return_value=True)
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor.query_result", return_value=(5, None))
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        executor = SSHExecutor(
+            username="user",
+            hostname="host",
+            ssh_key_file="key_file",
+            remote_workdir=tmp_dir,
+            create_unique_workdir=True,
+            do_cleanup=False,
+        )
+
+        executor.conda_env = None
+
+    def simple_task(x):
+        return x
+
+    dispatch_id = "asdf"
+    node_id = 1
+    operation_id = f"{dispatch_id}_{node_id}"
+    expected_current_remote_workdir = os.path.join(tmp_dir, dispatch_id, f"node_{node_id}")
+
+    mock__write_function_files = mocker.patch.object(SSHExecutor, "_write_function_files")
+    mock__write_function_files.return_value = ("a", "b", "c", "d", "e")
+    await executor.run(simple_task, [5], {}, {"dispatch_id": dispatch_id, "node_id": node_id})
+    mock__write_function_files.assert_called_with(
+        operation_id, simple_task, [5], {}, expected_current_remote_workdir
+    )
 
 
 def test_file_writes(mocker):
