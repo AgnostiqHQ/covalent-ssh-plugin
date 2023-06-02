@@ -26,7 +26,7 @@ import asyncio
 import os
 import socket
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Dict, Tuple, Union
+from typing import Any, Callable, Coroutine, Dict, Optional, Tuple, Union
 
 import asyncssh
 import cloudpickle as pickle
@@ -35,7 +35,7 @@ from covalent._shared_files import logger
 from covalent._shared_files.config import get_config
 from covalent.executor.executor_plugins.remote_executor import RemoteExecutor
 
-executor_plugin_name = "SSHExecutor"
+EXECUTOR_PLUGIN_NAME = "SSHExecutor"
 
 app_log = logger.app_log
 log_stack_info = logger.log_stack_info
@@ -45,10 +45,12 @@ _EXECUTOR_PLUGIN_DEFAULTS = {
     "hostname": "",
     "ssh_key_file": os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
     "cache_dir": str(Path(get_config("dispatcher.cache_dir")).expanduser().resolve()),
-    "remote_cache": ".cache/covalent",
     "python_path": "python",
-    "run_local_on_ssh_fail": False,
     "conda_env": "",
+    "remote_cache": ".cache/covalent",
+    "run_local_on_ssh_fail": False,
+    "remote_workdir": "covalent-workdir",
+    "create_unique_workdir": False,
 }
 
 
@@ -61,10 +63,13 @@ class SSHExecutor(RemoteExecutor):
         hostname: Address or hostname of the remote server.
         ssh_key_file: Filename of the private key used for authentication with the remote server.
         cache_dir: Local cache directory used by this executor for temporary files.
-        remote_cache: Remote server cache directory used for temporary files.
         python_path: The path to the Python 3 executable on the remote server.
+        conda_env: The conda env (if any) to be used on the remote server.
+        remote_cache: Remote server cache directory used for temporary files.
         run_local_on_ssh_fail: If True, and the execution fails to run on the remote server,
             then the execution is run on the local machine.
+        remote_workdir: The working directory on the remote server used for storing files produced from workflows.
+        create_unique_workdir: Whether to create unique sub-directories for each node / task / electron.
         poll_freq: Number of seconds to wait for before retrying the result poll
         do_cleanup: Whether to delete all the intermediate files or not
     """
@@ -79,6 +84,8 @@ class SSHExecutor(RemoteExecutor):
         conda_env: str = None,
         remote_cache: str = "",
         run_local_on_ssh_fail: bool = False,
+        remote_workdir: str = "",
+        create_unique_workdir: Optional[bool] = None,
         poll_freq: int = 15,
         do_cleanup: bool = True,
     ) -> None:
@@ -99,6 +106,14 @@ class SSHExecutor(RemoteExecutor):
         self.cache_dir = str(Path(self.cache_dir).expanduser().resolve())
 
         self.run_local_on_ssh_fail = run_local_on_ssh_fail
+
+        self.remote_workdir = remote_workdir or get_config("executors.ssh.remote_workdir")
+        self.create_unique_workdir = (
+            get_config("executors.ssh.create_unique_workdir")
+            if create_unique_workdir is None
+            else create_unique_workdir
+        )
+
         self.do_cleanup = do_cleanup
 
         ssh_key_file = ssh_key_file or get_config("executors.ssh.ssh_key_file")
@@ -110,10 +125,11 @@ class SSHExecutor(RemoteExecutor):
         fn: Callable,
         args: list,
         kwargs: dict,
+        current_remote_workdir: str = ".",
     ) -> None:
         """
-        Helper function to pickle the function to be executoed to file, and write the
-            python script which calls the function.
+        Helper function to pickle the function to be executed to file, and write the
+        python script which calls the function.
 
         Args:
             operation_id: A concatenation of the dispatch ID and task ID.
@@ -139,7 +155,9 @@ class SSHExecutor(RemoteExecutor):
         remote_result_file = os.path.join(self.remote_cache, f"result_{operation_id}.pkl")
         exec_script = "\n".join(
             [
+                "import os",
                 "import sys",
+                "from pathlib import Path",
                 "",
                 "result = None",
                 "exception = None",
@@ -155,9 +173,15 @@ class SSHExecutor(RemoteExecutor):
                 f"with open('{remote_function_file}', 'rb') as f_in:",
                 "    fn, args, kwargs = pickle.load(f_in)",
                 "    try:",
+                f"        Path({current_remote_workdir}).mkdir(parents=True, exist_ok=True)",
+                "        current_dir = os.getcwd()",
+                f"        os.chdir({current_remote_workdir})",
                 "        result = fn(*args, **kwargs)",
                 "    except Exception as e:",
                 "        exception = e",
+                "    finally:",
+                "        os.chdir(current_dir)",
+                "",
                 "",
                 f"with open('{remote_result_file}','wb') as f_out:",
                 "    pickle.dump((result, exception), f_out)",
@@ -440,6 +464,13 @@ class SSHExecutor(RemoteExecutor):
         node_id = task_metadata["node_id"]
         operation_id = f"{dispatch_id}_{node_id}"
 
+        if self.create_unique_workdir:
+            current_remote_workdir = os.path.join(
+                self.remote_workdir, dispatch_id, f"node_{node_id}"
+            )
+        else:
+            current_remote_workdir = self.remote_workdir
+
         exception = None
 
         await self._validate_credentials()
@@ -488,7 +519,9 @@ class SSHExecutor(RemoteExecutor):
             remote_function_file,
             remote_script_file,
             remote_result_file,
-        ) = self._write_function_files(operation_id, function, args, kwargs)
+        ) = self._write_function_files(
+            operation_id, function, args, kwargs, current_remote_workdir
+        )
 
         app_log.debug("Copying function file to remote machine...")
         await self._upload_task(
