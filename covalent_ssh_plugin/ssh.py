@@ -240,21 +240,31 @@ class SSHExecutor(RemoteExecutor):
         ssh_success = False
         conn = None
         if os.path.exists(self.ssh_key_file):
-            try:
-                conn = await asyncssh.connect(
-                    self.hostname,
-                    username=self.username,
-                    client_keys=[self.ssh_key_file],
-                    known_hosts=None,
-                )
+            for _ in range(6):
+                try:
+                    conn = await asyncssh.connect(
+                        self.hostname,
+                        username=self.username,
+                        client_keys=[self.ssh_key_file],
+                        known_hosts=None,
+                    )
 
-                ssh_success = True
-            except (socket.gaierror, ValueError, TimeoutError) as e:
-                app_log.error(e)
+                    ssh_success = True
+                except (socket.gaierror, ValueError, TimeoutError, ConnectionRefusedError) as e:
+                    app_log.error(e)
+
+                if conn is not None:
+                    break
+
+                await asyncio.sleep(5)
+
+            if conn is None:
+                raise RuntimeError("Could not connect to remote host.")
 
         else:
             message = f"no SSH key file found at {self.ssh_key_file}. Cannot connect to host."
             app_log.error(message)
+            raise RuntimeError(message)
 
         return ssh_success, conn
 
