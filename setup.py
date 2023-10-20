@@ -37,7 +37,7 @@ plugins_list = ["ssh = covalent_ssh_plugin.ssh"]
 
 setup_info = {
     "name": "covalent-ssh-plugin",
-    "packages": find_packages("."),
+    "packages": find_packages(exclude=["tests", "tests.*"]),
     "version": version,
     "maintainer": "Agnostiq",
     "url": "https://github.com/AgnostiqHQ/covalent-ssh-plugin",

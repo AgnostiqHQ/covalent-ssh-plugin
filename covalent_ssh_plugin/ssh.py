@@ -84,6 +84,7 @@ class SSHExecutor(RemoteExecutor):
         create_unique_workdir: Optional[bool] = None,
         poll_freq: int = 15,
         do_cleanup: bool = True,
+        retry_connect: bool = True,
     ) -> None:
 
         remote_cache = (
@@ -111,6 +112,7 @@ class SSHExecutor(RemoteExecutor):
         )
 
         self.do_cleanup = do_cleanup
+        self.retry_connect = retry_connect
 
         ssh_key_file = ssh_key_file or get_config("executors.ssh.ssh_key_file")
         self.ssh_key_file = str(Path(ssh_key_file).expanduser().resolve())
@@ -168,10 +170,10 @@ class SSHExecutor(RemoteExecutor):
                 "",
                 f"with open('{remote_function_file}', 'rb') as f_in:",
                 "    fn, args, kwargs = pickle.load(f_in)",
+                "    current_dir = os.getcwd()",
                 "    try:",
-                f"        Path({current_remote_workdir}).mkdir(parents=True, exist_ok=True)",
-                "        current_dir = os.getcwd()",
-                f"        os.chdir({current_remote_workdir})",
+                f"        Path('{current_remote_workdir}').mkdir(parents=True, exist_ok=True)",
+                f"        os.chdir('{current_remote_workdir}')",
                 "        result = fn(*args, **kwargs)",
                 "    except Exception as e:",
                 "        exception = e",
@@ -240,7 +242,8 @@ class SSHExecutor(RemoteExecutor):
         ssh_success = False
         conn = None
         if os.path.exists(self.ssh_key_file):
-            for _ in range(6):
+            retries = 6 if self.retry_connect else 1
+            for _ in range(retries):
                 try:
                     conn = await asyncssh.connect(
                         self.hostname,
@@ -258,7 +261,7 @@ class SSHExecutor(RemoteExecutor):
 
                 await asyncio.sleep(5)
 
-            if conn is None:
+            if conn is None and not self.run_local_on_ssh_fail:
                 raise RuntimeError("Could not connect to remote host.")
 
         else:
