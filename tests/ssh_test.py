@@ -21,6 +21,7 @@ import os
 import tempfile
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
+import aiofiles
 import pytest
 
 from covalent_ssh_plugin import SSHExecutor
@@ -73,36 +74,40 @@ async def test_on_ssh_fail(mocker):
     """Test that the process runs locally upon connection errors."""
 
     mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
-
-    executor = SSHExecutor(
-        username="user",
-        hostname="host",
-        ssh_key_file="key_file",
-        run_local_on_ssh_fail=True,
-    )
+    mocker.patch("covalent_ssh_plugin.SSHExecutor._validate_credentials", return_value=True)
 
     def simple_task(x):
         return x**2
 
-    executor.node_id = (0,)
-    executor.dispatch_id = (0,)
-    mocker.patch("covalent_ssh_plugin.SSHExecutor._validate_credentials", return_value=True)
-    result = await executor.run(
-        function=simple_task,
-        args=[5],
-        kwargs={},
-        task_metadata={"dispatch_id": -1, "node_id": -1},
-    )
-    assert result == 25
+    async with aiofiles.tempfile.NamedTemporaryFile("w") as f:
+        executor = SSHExecutor(
+            username="user",
+            hostname="host",
+            ssh_key_file=f.name,
+            run_local_on_ssh_fail=True,
+            retry_connect=False,
+        )
 
-    executor.run_local_on_ssh_fail = False
-    with pytest.raises(RuntimeError):
+        executor.node_id = (0,)
+        executor.dispatch_id = (0,)
+
         result = await executor.run(
             function=simple_task,
             args=[5],
             kwargs={},
             task_metadata={"dispatch_id": -1, "node_id": -1},
         )
+
+        assert result == 25
+
+        executor.run_local_on_ssh_fail = False
+        with pytest.raises(RuntimeError):
+            result = await executor.run(
+                function=simple_task,
+                args=[5],
+                kwargs={},
+                task_metadata={"dispatch_id": -1, "node_id": -1},
+            )
 
 
 @pytest.mark.asyncio
@@ -115,16 +120,11 @@ async def test_client_connect(mocker):
         username="user",
         hostname="host",
         ssh_key_file="non-existent_key",
+        retry_connect=False,
     )
 
-    connected, _ = await executor._client_connect()
-    assert connected is False
-
-    # Patch to fake existence of valid SSH keyfile. Connection should still fail due to
-    # the invalide username/hostname.
-    mocker.patch("builtins.open", mock_open(read_data="data"))
-    connected, _ = await executor._client_connect()
-    assert connected is False
+    with pytest.raises(RuntimeError):
+        connected, _ = await executor._client_connect()
 
     # Patch to make call to paramiko.SSHClient.connect not fail with incorrect user/host/keyfile.
     mocker.patch("os.path.exists", return_value=True)

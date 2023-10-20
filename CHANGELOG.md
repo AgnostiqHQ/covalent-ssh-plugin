@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+### Changed
+
+- Improved connection retry logic
+
 ## [0.22.0] - 2023-09-20
 
 ### Changed
