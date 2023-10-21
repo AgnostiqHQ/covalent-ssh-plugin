@@ -222,7 +222,7 @@ class SSHExecutor(RemoteExecutor):
 
         try:
             conn = await self._retry_client_connect(max_attempts=5)
-            ssh_success = (conn is not None)
+            ssh_success = conn is not None
         except (socket.gaierror, ValueError, TimeoutError) as e:
             app_log.error(e)
 
