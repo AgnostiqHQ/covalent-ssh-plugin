@@ -124,7 +124,7 @@ class SSHExecutor(RemoteExecutor):
         args: list,
         kwargs: dict,
         current_remote_workdir: str = ".",
-    ) -> None:
+    ) -> Tuple[str, str, str, str, str]:
         """
         Helper function to pickle the function to be executed to file, and write the
         python script which calls the function.
@@ -143,6 +143,7 @@ class SSHExecutor(RemoteExecutor):
         with open(function_file, "wb") as f_out:
             pickle.dump((fn, args, kwargs), f_out)
         remote_function_file = os.path.join(self.remote_cache, f"function_{operation_id}.pkl")
+        remote_result_file = os.path.join(self.remote_cache, f"result_{operation_id}.pkl")
 
         # Write the code that the remote server will use to execute the function.
 
@@ -150,46 +151,18 @@ class SSHExecutor(RemoteExecutor):
         message += f"Remote function file: {remote_function_file}"
         app_log.debug(message)
 
-        remote_result_file = os.path.join(self.remote_cache, f"result_{operation_id}.pkl")
-        exec_script = "\n".join(
-            [
-                "import os",
-                "import sys",
-                "from pathlib import Path",
-                "",
-                "result = None",
-                "exception = None",
-                "",
-                "try:",
-                "    import cloudpickle as pickle",
-                "except Exception as e:",
-                "    import pickle",
-                f"    with open('{remote_result_file}','wb') as f_out:",
-                "        pickle.dump((None, e), f_out)",
-                "        exit()",
-                "",
-                f"with open('{remote_function_file}', 'rb') as f_in:",
-                "    fn, args, kwargs = pickle.load(f_in)",
-                "    current_dir = os.getcwd()",
-                "    try:",
-                f"        Path('{current_remote_workdir}').mkdir(parents=True, exist_ok=True)",
-                f"        os.chdir('{current_remote_workdir}')",
-                "        result = fn(*args, **kwargs)",
-                "    except Exception as e:",
-                "        exception = e",
-                "    finally:",
-                "        os.chdir(current_dir)",
-                "",
-                "",
-                f"with open('{remote_result_file}','wb') as f_out:",
-                "    pickle.dump((result, exception), f_out)",
-                "",
-            ]
-        )
+        exec_blank = Path(__file__).parent / "exec.py"
         script_file = os.path.join(self.cache_dir, f"exec_{operation_id}.py")
         remote_script_file = os.path.join(self.remote_cache, f"exec_{operation_id}.py")
-        with open(script_file, "w") as f_out:
-            f_out.write(exec_script)
+
+        with open(exec_blank, "r", encoding="utf-8") as f_blank:
+            exec_script = f_blank.read().format(
+                remote_result_file=remote_result_file,
+                remote_function_file=remote_function_file,
+                current_remote_workdir=current_remote_workdir,
+            )
+            with open(script_file, "w", encoding="utf-8") as f_out:
+                f_out.write(exec_script)
 
         return (
             function_file,
