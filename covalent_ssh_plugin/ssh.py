@@ -70,6 +70,9 @@ class SSHExecutor(RemoteExecutor):
         do_cleanup: Whether to delete all the intermediate files or not
     """
 
+    max_connection_attempts = 5
+    retry_wait_time = 5  # seconds
+
     def __init__(
         self,
         username: str,
@@ -221,14 +224,14 @@ class SSHExecutor(RemoteExecutor):
             raise RuntimeError(message)
 
         try:
-            conn = await self._retry_client_connect(max_attempts=5)
+            conn = await self._retry_client_connect()
             ssh_success = conn is not None
         except (socket.gaierror, ValueError, TimeoutError) as e:
             app_log.error(e)
 
         return ssh_success, conn
 
-    async def _retry_client_connect(self, max_attempts) -> Optional[asyncssh.SSHClientConnection]:
+    async def _retry_client_connect(self) -> Optional[asyncssh.SSHClientConnection]:
         """
         Helper function that catches specific errors and retries connecting to the remote host.
 
@@ -246,7 +249,7 @@ class SSHExecutor(RemoteExecutor):
         )
 
         attempt = 0
-        while attempt < max_attempts:
+        while attempt < self.max_connection_attempts:
 
             try:
                 # Exit here if the connection is successful.
@@ -258,7 +261,7 @@ class SSHExecutor(RemoteExecutor):
                 )
             except _retry_errs as err:
                 app_log.warning(f"{err} (host: {self.hostname} | attempt #{attempt + 1})")
-                await asyncio.sleep(5)
+                await asyncio.sleep(self.retry_wait_time)
             finally:
                 attempt += 1
 
