@@ -121,7 +121,7 @@ async def test_failed_task_handling(mocker):
         fake_proc = namedtuple("fake_proc", ["stdout", "stderr"])
 
         async def run(self, *_):
-            return _FakeConn.fake_proc("Python 3.8", '')
+            return _FakeConn.fake_proc("Python 3.8", "")
 
         async def wait_closed(self):
             return True
@@ -136,7 +136,9 @@ async def test_failed_task_handling(mocker):
     mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
     mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._validate_credentials", return_value=True)
     mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._client_connect", return_value=(True, _conn))
-    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._write_function_files", return_value=[''] * 5)
+    mocker.patch(
+        "covalent_ssh_plugin.ssh.SSHExecutor._write_function_files", return_value=[""] * 5
+    )
     mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._upload_task", return_value=True)
     mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor.submit_task", return_value=_result)
 
