@@ -216,9 +216,9 @@ class SSHExecutor(RemoteExecutor):
         conn = None
 
         if not os.path.exists(self.ssh_key_file):
-            message = f"no SSH key file found at {self.ssh_key_file}. Cannot connect to host."
+            message = f"SSH key file {self.ssh_key_file} does not exist."
             app_log.error(message)
-            return ssh_success, conn
+            raise RuntimeError(message)
 
         try:
             conn = await self._retry_client_connect(max_attempts=5)
@@ -534,9 +534,10 @@ class SSHExecutor(RemoteExecutor):
         result = await self.submit_task(conn, remote_script_file)
 
         if result.exit_status != 0:
-            result_err = result.stderr.strip()
-            app_log.warning(result_err)
-            return self._on_ssh_fail(function, args, kwargs, result_err)
+            message = result.stderr.strip()
+            message = message or f"Task exited with nonzero exit status {result.exit_status}."
+            app_log.warning(message)
+            return self._on_ssh_fail(function, args, kwargs, message)
 
         if not await self._poll_task(conn, remote_result_file):
             message = (
