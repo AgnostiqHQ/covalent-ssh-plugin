@@ -134,6 +134,69 @@ async def test_client_connect(mocker):
 
 
 @pytest.mark.asyncio
+async def test_client_connect_retry_attempts(mocker):
+    """Test expectation and outcomes of retrying client connection."""
+
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
+
+    # Dummy used to batch `asyncssh.connect` calls.
+    async def _mock_asyncssh_connect(*args, **kwargs):
+        if _mock_asyncssh_connect.counter < 0:
+            return "immediate_connection_object"  # Success.
+
+        if _mock_asyncssh_connect.counter > _mock_asyncssh_connect.succeed_after - 1:
+            return "eventual_connection_object"  # Success.
+
+        # Failures.
+        if _mock_asyncssh_connect.counter % 2 == 0:
+            err = ConnectionRefusedError("Pretend connection was refused.")
+        else:
+            err = OSError("Pretend network unreachable.")
+        _mock_asyncssh_connect.counter += 1
+        raise err
+
+    mocker.patch("asyncssh.connect", side_effect=_mock_asyncssh_connect)
+
+    # Dummy stand-in for ssh key file.
+    with tempfile.NamedTemporaryFile() as f:
+        ssh_key_file = f.name
+
+        executor = SSHExecutor(
+            username="user",
+            hostname="host",
+            ssh_key_file=ssh_key_file,
+            retry_connect=False,
+        )
+
+        # Shorten wait time for quicker testing.
+        executor.retry_wait_time = 1
+
+        # Test immediate success.
+        _mock_asyncssh_connect.counter = -1
+        await executor._client_connect()
+
+        # Test eventual success.
+        _mock_asyncssh_connect.counter = 0
+        _mock_asyncssh_connect.succeed_after = 3
+        executor.retry_connect = True
+        await executor._client_connect()
+
+        # Test immediate failure.
+        _mock_asyncssh_connect.counter = 0
+        executor.retry_connect = False
+        with pytest.raises(ConnectionRefusedError):
+            await executor._client_connect()
+
+        # Test eventual failure.
+        _mock_asyncssh_connect.counter = 0
+        _mock_asyncssh_connect.succeed_after = executor.max_connection_attempts + 1
+        executor.retry_connect = True
+        ssh_success, conn = await executor._client_connect()
+        assert ssh_success is False
+        assert conn is None
+
+
+@pytest.mark.asyncio
 async def test_current_remote_workdir(mocker):
     async def mock_conn_run(x):
         ret = MagicMock()
