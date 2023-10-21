@@ -111,6 +111,56 @@ async def test_on_ssh_fail(mocker):
 
 
 @pytest.mark.asyncio
+async def test_failed_task_handling(mocker):
+    """Test error handling after failure of submit_task."""
+
+    from collections import namedtuple
+
+    class _FakeConn:
+
+        fake_proc = namedtuple("fake_proc", ["stdout", "stderr"])
+
+        async def run(self, *_):
+            return _FakeConn.fake_proc("Python 3.8", '')
+
+        async def wait_closed(self):
+            return True
+
+    class _FakeResult:
+        stderr = "Fake error from `test_failed_task_handling`."
+        exit_status = 1
+
+    _conn = _FakeConn()
+    _result = _FakeResult()
+
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._validate_credentials", return_value=True)
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._client_connect", return_value=(True, _conn))
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._write_function_files", return_value=[''] * 5)
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._upload_task", return_value=True)
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor.submit_task", return_value=_result)
+
+    async with aiofiles.tempfile.NamedTemporaryFile("w") as f:
+        executor = SSHExecutor(
+            username="user",
+            hostname="host",
+            ssh_key_file=f.name,
+            run_local_on_ssh_fail=False,
+            retry_connect=False,
+        )
+
+        executor.conda_env = None
+
+        with pytest.raises(RuntimeError):
+            await executor.run(
+                function=lambda x: x,
+                args=[5],
+                kwargs={},
+                task_metadata={"dispatch_id": -1, "node_id": -1},
+            )
+
+
+@pytest.mark.asyncio
 async def test_client_connect(mocker):
     """Test that connection will fail if credentials are not supplied."""
 
