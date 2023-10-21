@@ -154,6 +154,7 @@ async def test_current_remote_workdir(mocker):
     async def mock_submit_task(mock_conn, file):
         ret = MagicMock()
         ret.stderr = ""
+        ret.exit_status = 0
         return ret
 
     mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
