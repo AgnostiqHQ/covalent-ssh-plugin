@@ -224,14 +224,14 @@ class SSHExecutor(RemoteExecutor):
             raise RuntimeError(message)
 
         try:
-            conn = await self._retry_client_connect()
+            conn = await self._attempt_client_connect()
             ssh_success = conn is not None
         except (socket.gaierror, ValueError, TimeoutError) as e:
             app_log.error(e)
 
         return ssh_success, conn
 
-    async def _retry_client_connect(self) -> Optional[asyncssh.SSHClientConnection]:
+    async def _attempt_client_connect(self) -> Optional[asyncssh.SSHClientConnection]:
         """
         Helper function that catches specific errors and retries connecting to the remote host.
 
