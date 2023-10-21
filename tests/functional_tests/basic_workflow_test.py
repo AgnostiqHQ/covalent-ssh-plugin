@@ -33,17 +33,11 @@ def test_basic_workflow():
 def test_basic_workflow_failure():
     @ct.electron(executor="ssh")
     def join_words(a, b):
-        return ", ".join([a, b])
-
-    @ct.electron
-    def excitement(a):
-        raise Exception("Something went wrong!")
-        # return f"{a}!"
+        raise Exception(f"{', '.join([a, b])} -- but something went wrong!")
 
     @ct.lattice
     def basic_workflow_that_will_fail(a, b):
-        phrase = join_words(a, b)
-        return excitement(phrase)
+        return join_words(a, b)
 
     # Dispatch the workflow
     dispatch_id = ct.dispatch(basic_workflow_that_will_fail)("Hello", "World")
