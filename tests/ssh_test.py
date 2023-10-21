@@ -158,7 +158,7 @@ async def test_client_connect_retry_attempts(mocker):
     mocker.patch("asyncssh.connect", side_effect=_mock_asyncssh_connect)
 
     # Dummy stand-in for ssh key file.
-    with tempfile.NamedTemporaryFile() as f:
+    async with aiofiles.tempfile.NamedTemporaryFile("w") as f:
         ssh_key_file = f.name
 
         executor = SSHExecutor(
