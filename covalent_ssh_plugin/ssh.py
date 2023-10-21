@@ -242,14 +242,17 @@ class SSHExecutor(RemoteExecutor):
             An `SSHClientConnection` object if successful, None otherwise.
         """
 
-        # Retry connecting if any these errors happen:
+        # Retry connecting if any of these errors happen:
         _retry_errs = (
             ConnectionRefusedError,
             OSError,  # e.g. Network unreachable
         )
 
+        address = f"{self.username}@{self.hostname}"
+        attempt_max = self.max_connection_attempts
+
         attempt = 0
-        while attempt < self.max_connection_attempts:
+        while attempt < attempt_max:
 
             try:
                 # Exit here if the connection is successful.
@@ -260,8 +263,14 @@ class SSHExecutor(RemoteExecutor):
                     known_hosts=None,
                 )
             except _retry_errs as err:
-                app_log.warning(f"{err} (host: {self.hostname} | attempt #{attempt + 1})")
+
+                if not self.retry_connect:
+                    app_log.error(f"{err} ({address} | retry disabled).")
+                    raise err
+
+                app_log.warning(f"{err} ({address} | retry {attempt+1}/{attempt_max})")
                 await asyncio.sleep(self.retry_wait_time)
+
             finally:
                 attempt += 1
 
