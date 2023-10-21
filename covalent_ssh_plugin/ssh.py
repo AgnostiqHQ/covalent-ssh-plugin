@@ -228,9 +228,9 @@ class SSHExecutor(RemoteExecutor):
             app_log.error(message)
             raise RuntimeError(message)
 
-    async def _client_connect(self) -> Tuple[bool, asyncssh.SSHClientConnection]:
+    async def _client_connect(self) -> Tuple[bool, Optional[asyncssh.SSHClientConnection]]:
         """
-        Helper function for connecting to the remote host through the paramiko module.
+        Attempts connection to the remote host.
 
         Args:
             None
@@ -241,35 +241,55 @@ class SSHExecutor(RemoteExecutor):
 
         ssh_success = False
         conn = None
-        if os.path.exists(self.ssh_key_file):
-            retries = 6 if self.retry_connect else 1
-            for _ in range(retries):
-                try:
-                    conn = await asyncssh.connect(
-                        self.hostname,
-                        username=self.username,
-                        client_keys=[self.ssh_key_file],
-                        known_hosts=None,
-                    )
 
-                    ssh_success = True
-                except (socket.gaierror, ValueError, TimeoutError, ConnectionRefusedError) as e:
-                    app_log.error(e)
-
-                if conn is not None:
-                    break
-
-                await asyncio.sleep(5)
-
-            if conn is None and not self.run_local_on_ssh_fail:
-                raise RuntimeError("Could not connect to remote host.")
-
-        else:
+        if not os.path.exists(self.ssh_key_file):
             message = f"no SSH key file found at {self.ssh_key_file}. Cannot connect to host."
             app_log.error(message)
-            raise RuntimeError(message)
+            return ssh_success, conn
+
+        try:
+            conn = await self._retry_client_connect(max_attempts=5)
+            ssh_success = (conn is not None)
+        except (socket.gaierror, ValueError, TimeoutError) as e:
+            app_log.error(e)
 
         return ssh_success, conn
+
+    async def _retry_client_connect(self, max_attempts) -> Optional[asyncssh.SSHClientConnection]:
+        """
+        Helper function that catches specific errors and retries connecting to the remote host.
+
+        Args:
+            max_attempts: Gives up after this many attempts.
+
+        Returns:
+            An `SSHClientConnection` object if successful, None otherwise.
+        """
+
+        # Retry connecting if any these errors happen:
+        _retry_errs = (
+            ConnectionRefusedError,
+            OSError,  # e.g. Network unreachable
+        )
+
+        attempt = 0
+        while attempt < max_attempts:
+
+            try:
+                # Exit here if the connection is successful.
+                return await asyncssh.connect(
+                    self.hostname,
+                    username=self.username,
+                    client_keys=[self.ssh_key_file],
+                    known_hosts=None,
+                )
+            except _retry_errs as err:
+                app_log.warning(f"{err} (host: {self.hostname} | attempt #{attempt + 1})")
+                await asyncio.sleep(5)
+            finally:
+                attempt += 1
+
+        return None
 
     async def cleanup(
         self,
@@ -290,7 +310,7 @@ class SSHExecutor(RemoteExecutor):
             script_file: Path to the script file to be deleted locally
             result_file: Path to the result file to be deleted locally
             remote_function_file: Path to the function file to be deleted on remote
-            remote_script_file: Path to the sccript file to be deleted on remote
+            remote_script_file: Path to the script file to be deleted on remote
             remote_result_file: Path to the result file to be deleted on remote
 
         Returns:
@@ -540,7 +560,8 @@ class SSHExecutor(RemoteExecutor):
         app_log.debug("Running function file in remote machine...")
         result = await self.submit_task(conn, remote_script_file)
 
-        if result_err := result.stderr.strip():
+        if result.exit_status != 0:
+            result_err = result.stderr.strip()
             app_log.warning(result_err)
             return self._on_ssh_fail(function, args, kwargs, result_err)
 
