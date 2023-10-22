@@ -111,13 +111,13 @@ async def test_on_ssh_fail(mocker):
 
 
 @pytest.mark.asyncio
-async def test_failed_task_handling(mocker):
-    """Test error handling after failure of submit_task."""
+async def test_nonzero_exit_status(mocker):
+    """Test handling nonzero exit status from 'run task' command on remote."""
 
     from collections import namedtuple
 
+    # Stand-in for the ssh connection object.
     class _FakeConn:
-
         fake_proc = namedtuple("fake_proc", ["stdout", "stderr"])
 
         async def run(self, *_):
@@ -126,13 +126,16 @@ async def test_failed_task_handling(mocker):
         async def wait_closed(self):
             return True
 
-    class _FakeResult:
-        stderr = "Fake error from `test_failed_task_handling`."
-        exit_status = 1
+    # Stand-in for the `run` command result.
+    class _FakeResultFailed:
+        stderr = "Fake error message"
+        exit_status = 1  # <--- This is the important part.
 
+    # Use these for patching.
     _conn = _FakeConn()
-    _result = _FakeResult()
+    _result = _FakeResultFailed()
 
+    # Patch anything that requires a real connection.
     mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
     mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._validate_credentials", return_value=True)
     mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._client_connect", return_value=(True, _conn))
@@ -143,6 +146,7 @@ async def test_failed_task_handling(mocker):
     mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor.submit_task", return_value=_result)
 
     async with aiofiles.tempfile.NamedTemporaryFile("w") as f:
+
         executor = SSHExecutor(
             username="user",
             hostname="host",
@@ -153,9 +157,10 @@ async def test_failed_task_handling(mocker):
 
         executor.conda_env = None
 
+        # Check that `exit_status != 0` triggers a runtime error.
         with pytest.raises(RuntimeError):
             await executor.run(
-                function=lambda x: x,
+                function=lambda: "Doesn't matter; dummy function.",
                 args=[5],
                 kwargs={},
                 task_metadata={"dispatch_id": -1, "node_id": -1},
