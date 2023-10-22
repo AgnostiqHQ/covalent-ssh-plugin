@@ -192,29 +192,33 @@ async def test_client_connect(mocker):
 
 @pytest.mark.asyncio
 async def test_client_connect_retry_attempts(mocker):
-    """Test expectation and outcomes of retrying client connection."""
+    """Test various outcomes of retrying client connection."""
 
     mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
 
-    # Dummy used to batch `asyncssh.connect` calls.
+    # Dummy used to patch `asyncssh.connect` calls.
     async def _mock_asyncssh_connect(*args, **kwargs):
-        if _mock_asyncssh_connect.counter < 0:
+
+        # Set `counter = -1` to test immediate success.
+        if _mock_asyncssh_connect.err_counter < 0:
             return "immediate_connection_object"  # Success.
 
-        if _mock_asyncssh_connect.counter > _mock_asyncssh_connect.succeed_after - 1:
+        # Set `succeed_after` to decide number of failures before success.
+        if _mock_asyncssh_connect.err_counter > _mock_asyncssh_connect.succeed_after - 1:
             return "eventual_connection_object"  # Success.
 
         # Failures.
-        if _mock_asyncssh_connect.counter % 2 == 0:
+        if _mock_asyncssh_connect.err_counter % 2 == 0:
             err = ConnectionRefusedError("Pretend connection was refused.")
         else:
             err = OSError("Pretend network unreachable.")
-        _mock_asyncssh_connect.counter += 1
+
+        _mock_asyncssh_connect.err_counter += 1
         raise err
 
     mocker.patch("asyncssh.connect", side_effect=_mock_asyncssh_connect)
 
-    # Dummy stand-in for ssh key file.
+    # Stand-in for ssh key file.
     async with aiofiles.tempfile.NamedTemporaryFile("w") as f:
         ssh_key_file = f.name
 
@@ -225,27 +229,27 @@ async def test_client_connect_retry_attempts(mocker):
             retry_connect=False,
         )
 
-        # Shorten wait time for quicker testing.
+        # Set class attribute to shorten wait time for quicker testing.
         executor.retry_wait_time = 1
 
         # Test immediate success.
-        _mock_asyncssh_connect.counter = -1
+        _mock_asyncssh_connect.err_counter = -1
         await executor._client_connect()
 
         # Test eventual success.
-        _mock_asyncssh_connect.counter = 0
+        _mock_asyncssh_connect.err_counter = 0
         _mock_asyncssh_connect.succeed_after = 3
         executor.retry_connect = True
         await executor._client_connect()
 
         # Test immediate failure.
-        _mock_asyncssh_connect.counter = 0
+        _mock_asyncssh_connect.err_counter = 0
         executor.retry_connect = False
         with pytest.raises(ConnectionRefusedError):
             await executor._client_connect()
 
         # Test eventual failure.
-        _mock_asyncssh_connect.counter = 0
+        _mock_asyncssh_connect.err_counter = 0
         _mock_asyncssh_connect.succeed_after = executor.max_connection_attempts + 1
         executor.retry_connect = True
         ssh_success, conn = await executor._client_connect()
