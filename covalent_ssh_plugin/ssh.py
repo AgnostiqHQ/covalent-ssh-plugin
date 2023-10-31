@@ -72,7 +72,6 @@ class SSHExecutor(RemoteExecutor):
         retry_wait_time: Time to wait (in seconds) before reattempting connection.
     """
 
-
     def __init__(
         self,
         username: str,
