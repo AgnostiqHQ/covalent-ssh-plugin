@@ -66,8 +66,10 @@ class SSHExecutor(RemoteExecutor):
             then the execution is run on the local machine.
         remote_workdir: The working directory on the remote server used for storing files produced from workflows.
         create_unique_workdir: Whether to create unique sub-directories for each node / task / electron.
-        poll_freq: Number of seconds to wait for before retrying the result poll
-        do_cleanup: Whether to delete all the intermediate files or not
+        poll_freq: Number of seconds to wait for before retrying the result poll.
+        do_cleanup: Delete all the intermediate files or not if True.
+        max_connection_attempts: Maximum number of attempts to establish SSH connection.
+        retry_wait_time: Time to wait (in seconds) before reattempting connection.
     """
 
     def __init__(
@@ -85,6 +87,8 @@ class SSHExecutor(RemoteExecutor):
         poll_freq: int = 15,
         do_cleanup: bool = True,
         retry_connect: bool = True,
+        max_connection_attempts: int = 5,
+        retry_wait_time: int = 5,
     ) -> None:
 
         remote_cache = (
@@ -113,6 +117,8 @@ class SSHExecutor(RemoteExecutor):
 
         self.do_cleanup = do_cleanup
         self.retry_connect = retry_connect
+        self.max_connection_attempts = max_connection_attempts
+        self.retry_wait_time = retry_wait_time
 
         ssh_key_file = ssh_key_file or get_config("executors.ssh.ssh_key_file")
         self.ssh_key_file = str(Path(ssh_key_file).expanduser().resolve())
@@ -124,7 +130,7 @@ class SSHExecutor(RemoteExecutor):
         args: list,
         kwargs: dict,
         current_remote_workdir: str = ".",
-    ) -> None:
+    ) -> Tuple[str, str, str, str, str]:
         """
         Helper function to pickle the function to be executed to file, and write the
         python script which calls the function.
@@ -143,6 +149,7 @@ class SSHExecutor(RemoteExecutor):
         with open(function_file, "wb") as f_out:
             pickle.dump((fn, args, kwargs), f_out)
         remote_function_file = os.path.join(self.remote_cache, f"function_{operation_id}.pkl")
+        remote_result_file = os.path.join(self.remote_cache, f"result_{operation_id}.pkl")
 
         # Write the code that the remote server will use to execute the function.
 
@@ -150,46 +157,18 @@ class SSHExecutor(RemoteExecutor):
         message += f"Remote function file: {remote_function_file}"
         app_log.debug(message)
 
-        remote_result_file = os.path.join(self.remote_cache, f"result_{operation_id}.pkl")
-        exec_script = "\n".join(
-            [
-                "import os",
-                "import sys",
-                "from pathlib import Path",
-                "",
-                "result = None",
-                "exception = None",
-                "",
-                "try:",
-                "    import cloudpickle as pickle",
-                "except Exception as e:",
-                "    import pickle",
-                f"    with open('{remote_result_file}','wb') as f_out:",
-                "        pickle.dump((None, e), f_out)",
-                "        exit()",
-                "",
-                f"with open('{remote_function_file}', 'rb') as f_in:",
-                "    fn, args, kwargs = pickle.load(f_in)",
-                "    current_dir = os.getcwd()",
-                "    try:",
-                f"        Path('{current_remote_workdir}').mkdir(parents=True, exist_ok=True)",
-                f"        os.chdir('{current_remote_workdir}')",
-                "        result = fn(*args, **kwargs)",
-                "    except Exception as e:",
-                "        exception = e",
-                "    finally:",
-                "        os.chdir(current_dir)",
-                "",
-                "",
-                f"with open('{remote_result_file}','wb') as f_out:",
-                "    pickle.dump((result, exception), f_out)",
-                "",
-            ]
-        )
+        exec_blank = Path(__file__).parent / "exec.py"
         script_file = os.path.join(self.cache_dir, f"exec_{operation_id}.py")
         remote_script_file = os.path.join(self.remote_cache, f"exec_{operation_id}.py")
-        with open(script_file, "w") as f_out:
-            f_out.write(exec_script)
+
+        with open(exec_blank, "r", encoding="utf-8") as f_blank:
+            exec_script = f_blank.read().format(
+                remote_result_file=remote_result_file,
+                remote_function_file=remote_function_file,
+                current_remote_workdir=current_remote_workdir,
+            )
+            with open(script_file, "w", encoding="utf-8") as f_out:
+                f_out.write(exec_script)
 
         return (
             function_file,
@@ -228,9 +207,9 @@ class SSHExecutor(RemoteExecutor):
             app_log.error(message)
             raise RuntimeError(message)
 
-    async def _client_connect(self) -> Tuple[bool, asyncssh.SSHClientConnection]:
+    async def _client_connect(self) -> Tuple[bool, Optional[asyncssh.SSHClientConnection]]:
         """
-        Helper function for connecting to the remote host through the paramiko module.
+        Attempts connection to the remote host.
 
         Args:
             None
@@ -241,35 +220,65 @@ class SSHExecutor(RemoteExecutor):
 
         ssh_success = False
         conn = None
-        if os.path.exists(self.ssh_key_file):
-            retries = 6 if self.retry_connect else 1
-            for _ in range(retries):
-                try:
-                    conn = await asyncssh.connect(
-                        self.hostname,
-                        username=self.username,
-                        client_keys=[self.ssh_key_file],
-                        known_hosts=None,
-                    )
 
-                    ssh_success = True
-                except (socket.gaierror, ValueError, TimeoutError, ConnectionRefusedError) as e:
-                    app_log.error(e)
-
-                if conn is not None:
-                    break
-
-                await asyncio.sleep(5)
-
-            if conn is None and not self.run_local_on_ssh_fail:
-                raise RuntimeError("Could not connect to remote host.")
-
-        else:
-            message = f"no SSH key file found at {self.ssh_key_file}. Cannot connect to host."
+        if not os.path.exists(self.ssh_key_file):
+            message = f"SSH key file {self.ssh_key_file} does not exist."
             app_log.error(message)
             raise RuntimeError(message)
 
+        try:
+            conn = await self._attempt_client_connect()
+            ssh_success = conn is not None
+        except (socket.gaierror, ValueError, TimeoutError) as e:
+            app_log.error(e)
+
         return ssh_success, conn
+
+    async def _attempt_client_connect(self) -> Optional[asyncssh.SSHClientConnection]:
+        """
+        Helper function that catches specific errors and retries connecting to the remote host.
+
+        Args:
+            max_attempts: Gives up after this many attempts.
+
+        Returns:
+            An `SSHClientConnection` object if successful, None otherwise.
+        """
+
+        # Retry connecting if any of these errors happen:
+        _retry_errs = (
+            ConnectionRefusedError,
+            OSError,  # e.g. Network unreachable
+        )
+
+        address = f"{self.username}@{self.hostname}"
+        attempt_max = self.max_connection_attempts
+
+        attempt = 0
+        while attempt < attempt_max:
+
+            try:
+                # Exit here if the connection is successful.
+                return await asyncssh.connect(
+                    self.hostname,
+                    username=self.username,
+                    client_keys=[self.ssh_key_file],
+                    known_hosts=None,
+                )
+            except _retry_errs as err:
+
+                if not self.retry_connect:
+                    app_log.error(f"{err} ({address} | retry disabled).")
+                    raise err
+
+                app_log.warning(f"{err} ({address} | retry {attempt+1}/{attempt_max})")
+                await asyncio.sleep(self.retry_wait_time)
+
+            finally:
+                attempt += 1
+
+        # Failed to connect to client.
+        return None
 
     async def cleanup(
         self,
@@ -290,7 +299,7 @@ class SSHExecutor(RemoteExecutor):
             script_file: Path to the script file to be deleted locally
             result_file: Path to the result file to be deleted locally
             remote_function_file: Path to the function file to be deleted on remote
-            remote_script_file: Path to the sccript file to be deleted on remote
+            remote_script_file: Path to the script file to be deleted on remote
             remote_result_file: Path to the result file to be deleted on remote
 
         Returns:
@@ -540,9 +549,11 @@ class SSHExecutor(RemoteExecutor):
         app_log.debug("Running function file in remote machine...")
         result = await self.submit_task(conn, remote_script_file)
 
-        if result_err := result.stderr.strip():
-            app_log.warning(result_err)
-            return self._on_ssh_fail(function, args, kwargs, result_err)
+        if result.exit_status != 0:
+            message = result.stderr.strip()
+            message = message or f"Task exited with nonzero exit status {result.exit_status}."
+            app_log.warning(message)
+            return self._on_ssh_fail(function, args, kwargs, message)
 
         if not await self._poll_task(conn, remote_result_file):
             message = (

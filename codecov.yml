@@ -1,0 +1,3 @@
+ignore:
+  # This script is read into a string and formatted. Never executed directly.
+  - covalent_ssh_plugin/exec.py

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+### Changed
+
+- Expand connection retry logic to cover more cases
+- Move exec script into a separate file
+
 ## [0.23.0] - 2023-10-20
 
 ### Changed

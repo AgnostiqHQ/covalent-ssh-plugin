@@ -111,6 +111,63 @@ async def test_on_ssh_fail(mocker):
 
 
 @pytest.mark.asyncio
+async def test_nonzero_exit_status(mocker):
+    """Test handling nonzero exit status from 'run task' command on remote."""
+
+    from collections import namedtuple
+
+    # Stand-in for the ssh connection object.
+    class _FakeConn:
+        fake_proc = namedtuple("fake_proc", ["stdout", "stderr"])
+
+        async def run(self, *_):
+            return _FakeConn.fake_proc("Python 3.8", "")
+
+        async def wait_closed(self):
+            return True
+
+    # Stand-in for the `run` command result.
+    class _FakeResultFailed:
+        stderr = "Fake error message"
+        exit_status = 1  # <--- This is the important part.
+
+    # Use these for patching.
+    _conn = _FakeConn()
+    _result = _FakeResultFailed()
+
+    # Patch anything that requires a real connection.
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._validate_credentials", return_value=True)
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._client_connect", return_value=(True, _conn))
+    mocker.patch(
+        "covalent_ssh_plugin.ssh.SSHExecutor._write_function_files", return_value=[""] * 5
+    )
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor._upload_task", return_value=True)
+    mocker.patch("covalent_ssh_plugin.ssh.SSHExecutor.submit_task", return_value=_result)
+
+    async with aiofiles.tempfile.NamedTemporaryFile("w") as f:
+
+        executor = SSHExecutor(
+            username="user",
+            hostname="host",
+            ssh_key_file=f.name,
+            run_local_on_ssh_fail=False,
+            retry_connect=False,
+        )
+
+        executor.conda_env = None
+
+        # Check that `exit_status != 0` triggers a runtime error.
+        with pytest.raises(RuntimeError):
+            await executor.run(
+                function=lambda: "Doesn't matter; dummy function.",
+                args=[5],
+                kwargs={},
+                task_metadata={"dispatch_id": -1, "node_id": -1},
+            )
+
+
+@pytest.mark.asyncio
 async def test_client_connect(mocker):
     """Test that connection will fail if credentials are not supplied."""
 
@@ -134,6 +191,73 @@ async def test_client_connect(mocker):
 
 
 @pytest.mark.asyncio
+async def test_client_connect_retry_attempts(mocker):
+    """Test various outcomes of retrying client connection."""
+
+    mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
+
+    # Dummy used to patch `asyncssh.connect` calls.
+    async def _mock_asyncssh_connect(*args, **kwargs):
+
+        # Set `counter = -1` to test immediate success.
+        if _mock_asyncssh_connect.err_counter < 0:
+            return "immediate_connection_object"  # Success.
+
+        # Set `succeed_after` to decide number of failures before success.
+        if _mock_asyncssh_connect.err_counter > _mock_asyncssh_connect.succeed_after - 1:
+            return "eventual_connection_object"  # Success.
+
+        # Failures.
+        if _mock_asyncssh_connect.err_counter % 2 == 0:
+            err = ConnectionRefusedError("Pretend connection was refused.")
+        else:
+            err = OSError("Pretend network unreachable.")
+
+        _mock_asyncssh_connect.err_counter += 1
+        raise err
+
+    mocker.patch("asyncssh.connect", side_effect=_mock_asyncssh_connect)
+
+    # Stand-in for ssh key file.
+    async with aiofiles.tempfile.NamedTemporaryFile("w") as f:
+        ssh_key_file = f.name
+
+        executor = SSHExecutor(
+            username="user",
+            hostname="host",
+            ssh_key_file=ssh_key_file,
+            retry_connect=False,
+        )
+
+        # Set class attribute to shorten wait time for quicker testing.
+        executor.retry_wait_time = 1
+
+        # Test immediate success.
+        _mock_asyncssh_connect.err_counter = -1
+        await executor._client_connect()
+
+        # Test eventual success.
+        _mock_asyncssh_connect.err_counter = 0
+        _mock_asyncssh_connect.succeed_after = 3
+        executor.retry_connect = True
+        await executor._client_connect()
+
+        # Test immediate failure.
+        _mock_asyncssh_connect.err_counter = 0
+        executor.retry_connect = False
+        with pytest.raises(ConnectionRefusedError):
+            await executor._client_connect()
+
+        # Test eventual failure.
+        _mock_asyncssh_connect.err_counter = 0
+        _mock_asyncssh_connect.succeed_after = executor.max_connection_attempts + 1
+        executor.retry_connect = True
+        ssh_success, conn = await executor._client_connect()
+        assert ssh_success is False
+        assert conn is None
+
+
+@pytest.mark.asyncio
 async def test_current_remote_workdir(mocker):
     async def mock_conn_run(x):
         ret = MagicMock()
@@ -154,6 +278,7 @@ async def test_current_remote_workdir(mocker):
     async def mock_submit_task(mock_conn, file):
         ret = MagicMock()
         ret.stderr = ""
+        ret.exit_status = 0
         return ret
 
     mocker.patch("covalent_ssh_plugin.ssh.get_config", side_effect=get_config_mock)
