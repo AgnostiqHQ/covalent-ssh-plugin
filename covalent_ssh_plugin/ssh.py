@@ -66,12 +66,12 @@ class SSHExecutor(RemoteExecutor):
             then the execution is run on the local machine.
         remote_workdir: The working directory on the remote server used for storing files produced from workflows.
         create_unique_workdir: Whether to create unique sub-directories for each node / task / electron.
-        poll_freq: Number of seconds to wait for before retrying the result poll
-        do_cleanup: Whether to delete all the intermediate files or not
+        poll_freq: Number of seconds to wait for before retrying the result poll.
+        do_cleanup: Delete all the intermediate files or not if True.
+        max_connection_attempts: Maximum number of attempts to establish SSH connection.
+        retry_wait_time: Time to wait (in seconds) before reattempting connection.
     """
 
-    max_connection_attempts = 5
-    retry_wait_time = 5  # seconds
 
     def __init__(
         self,
@@ -88,6 +88,8 @@ class SSHExecutor(RemoteExecutor):
         poll_freq: int = 15,
         do_cleanup: bool = True,
         retry_connect: bool = True,
+        max_connection_attempts: int = 5,
+        retry_wait_time: int = 5,
     ) -> None:
 
         remote_cache = (
@@ -116,6 +118,8 @@ class SSHExecutor(RemoteExecutor):
 
         self.do_cleanup = do_cleanup
         self.retry_connect = retry_connect
+        self.max_connection_attempts = max_connection_attempts
+        self.retry_wait_time = retry_wait_time
 
         ssh_key_file = ssh_key_file or get_config("executors.ssh.ssh_key_file")
         self.ssh_key_file = str(Path(ssh_key_file).expanduser().resolve())
