@@ -277,6 +277,7 @@ class SSHExecutor(RemoteExecutor):
             finally:
                 attempt += 1
 
+        # Failed to connect to client.
         return None
 
     async def cleanup(
