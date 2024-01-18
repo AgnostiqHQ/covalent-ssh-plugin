@@ -249,6 +249,7 @@ class SSHExecutor(RemoteExecutor):
         _retry_errs = (
             ConnectionRefusedError,
             OSError,  # e.g. Network unreachable
+            asyncssh.ConnectionLost,  # e.g. Connection reset by remote host
         )
 
         address = f"{self.username}@{self.hostname}"
