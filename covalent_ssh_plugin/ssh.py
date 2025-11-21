@@ -40,6 +40,8 @@ _EXECUTOR_PLUGIN_DEFAULTS = {
     "username": "",
     "hostname": "",
     "ssh_key_file": os.path.join(os.environ["HOME"], ".ssh/id_rsa"),
+    "ssh_port": 22,
+    "ssh_config": os.path.join(os.environ["HOME"], ".ssh/config"),
     "cache_dir": str(Path(get_config("dispatcher.cache_dir")).expanduser().resolve()),
     "python_path": "python",
     "conda_env": "",
@@ -77,6 +79,8 @@ class SSHExecutor(RemoteExecutor):
         username: str,
         hostname: str,
         ssh_key_file: str = None,
+        ssh_port: int = 22,
+        ssh_config: str = None,
         cache_dir: str = None,
         python_path: str = "",
         conda_env: str = None,
@@ -107,7 +111,8 @@ class SSHExecutor(RemoteExecutor):
         self.cache_dir = str(Path(self.cache_dir).expanduser().resolve())
 
         self.run_local_on_ssh_fail = run_local_on_ssh_fail
-
+        self.ssh_port = ssh_port or get_config("executors.ssh.ssh_port")
+        self.ssh_config = ssh_config or get_config("executors.ssh.ssh_config")
         self.remote_workdir = remote_workdir or get_config("executors.ssh.remote_workdir")
         self.create_unique_workdir = (
             get_config("executors.ssh.create_unique_workdir")
@@ -265,6 +270,8 @@ class SSHExecutor(RemoteExecutor):
                     username=self.username,
                     client_keys=[self.ssh_key_file],
                     known_hosts=None,
+                    port=self.ssh_port,
+                    config=self.ssh_config,
                 )
             except _retry_errs as err:
 
@@ -377,7 +384,8 @@ class SSHExecutor(RemoteExecutor):
         cmd = f"{self.python_path} {remote_script_file}"
 
         if self.conda_env:
-            cmd = f'eval "$(conda shell.bash hook)" && conda activate {self.conda_env} && {cmd}'
+            # cmd = f'eval "$(conda shell.bash hook)" && conda activate {self.conda_env} && {cmd}' # why do we need to init every time?
+            cmd = f"eval conda activate {self.conda_env} && {cmd}"
 
         app_log.debug(f"Running the function on remote now with command: {cmd}")
         result = await conn.run(cmd)
@@ -507,9 +515,7 @@ class SSHExecutor(RemoteExecutor):
 
         if self.conda_env:
             app_log.debug(f"Verifying if conda env {self.conda_env} exists")
-            completed_proc = await conn.run(
-                f'eval "$(conda shell.bash hook)" && conda env list | grep {self.conda_env}'
-            )
+            completed_proc = await conn.run(f"eval conda env list | grep {self.conda_env}")
 
             if completed_proc.returncode != 0:
                 message = (
