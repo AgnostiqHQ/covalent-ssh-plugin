@@ -16,7 +16,6 @@
 
 """Tests for the SSH executor plugin."""
 
-
 import os
 import tempfile
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
